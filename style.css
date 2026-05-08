@@ -1,0 +1,196 @@
+/* --- Root Variables for Consistent Branding --- */
+:root {
+    --ttic-blue: #004a99;      /* Primary Identity Color */
+    --ttic-gold: #f1c40f;      /* Secondary/Accent Color */
+    --bg-light: #f4f7f9;       /* Light Grey Background */
+    --text-dark: #2c3e50;      /* Professional Typography Color */
+    --success-green: #27ae60;
+    --danger-red: #e74c3c;
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Base Styles --- */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-light);
+    color: var(--text-dark);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* --- Header & Navigation --- */
+.navbar {
+    background-color: var(--ttic-blue);
+    border-bottom: 4px solid var(--ttic-gold);
+    padding: 1rem 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+}
+
+/* --- Dashboard Cards --- */
+.card {
+    border: none !important;
+    border-radius: 12px !important;
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s ease;
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: var(--ttic-blue) !important;
+    color: white !important;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    padding: 15px !important;
+    border-bottom: 2px solid var(--ttic-gold) !important;
+}
+
+/* --- QR Scanner Container --- */
+#reader {
+    width: 100%;
+    max-width: 450px;
+    margin: 15px auto;
+    border: 3px dashed var(--ttic-blue);
+    border-radius: 15px;
+    background: #fff;
+}
+
+/* --- Forms & Inputs --- */
+.form-control {
+    border: 1px solid #dce4ec;
+    border-radius: 8px;
+    padding: 12px;
+    transition: border-color 0.2s;
+}
+
+.form-control:focus {
+    border-color: var(--ttic-blue);
+    box-shadow: 0 0 0 0.2rem rgba(0, 74, 153, 0.15);
+}
+
+.btn-ttic {
+    background-color: var(--ttic-blue);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-ttic:hover {
+    background-color: #003366;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transform: translateY(-1px);
+}
+
+/* --- Table & Records (Principal's View) --- */
+.table {
+    margin-bottom: 0;
+    vertical-align: middle;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    color: #555;
+}
+
+.badge-status {
+    padding: 6px 12px;
+    border-radius: 50px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+/* --- Footer --- */
+footer {
+    background-color: #fff;
+    border-top: 1px solid #e0e0e0;
+    padding: 30px 0;
+    margin-top: 50px;
+}
+
+.footer-values {
+    color: var(--ttic-blue);
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+/* --- Utilities --- */
+.hidden {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    #reader {
+        max-width: 100%;
+    }
+}
+.logo {
+    height: 60px;        /* controls size */
+    width: auto;         /* keeps aspect ratio */
+    object-fit: contain; /* prevents stretching */
+}
+
+/* Optional: make it slightly bigger on larger screens */
+@media (min-width: 768px) {
+    .logo {
+        height: 60px;
+    }
+}
+body {
+    animation: fadeIn 0.8s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+.btn-ttic {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-ttic::after {
+    content: "";
+    position: absolute;
+    width: 0%;
+    height: 100%;
+    background: rgba(255,255,255,0.2);
+    top: 0;
+    left: 0;
+    transition: 0.4s;
+}
+
+.btn-ttic:hover::after {
+    width: 100%;
+}
+.logo {
+    height: 40px;
+    transition: transform 0.3s ease;
+}
+
+.logo:hover {
+    transform: scale(1.1) rotate(3deg);
+}
