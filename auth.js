@@ -56,7 +56,7 @@ function injectStyles() {
 
     #auth-backdrop {
       position: absolute; inset: 0;
-      background: linear-gradient(135deg, #001f4d 0%, #003a8c 50%, #004a99 100%);
+      background: linear-gradient(135deg, #17251e 0%, #263b2f 50%, #3c5141 100%);
     }
 
     #auth-backdrop::before {
@@ -71,7 +71,7 @@ function injectStyles() {
       position: relative; z-index: 9999;
       width: min(460px, 94vw);
       background: rgba(255,255,255,0.97);
-      border-radius: 20px;
+      border-radius: 0;
       overflow: hidden;
       box-shadow: 0 24px 80px rgba(0,0,20,.45), 0 4px 16px rgba(0,0,0,.12);
       animation: authSlideUp .35s cubic-bezier(.22,.68,0,1.2) both;
@@ -83,7 +83,7 @@ function injectStyles() {
     }
 
     #auth-top-bar {
-      background: linear-gradient(135deg, #004a99, #0062cc);
+      background: #17251e;
       padding: 1.6rem 2rem 1.4rem;
       text-align: center;
       position: relative;
@@ -92,7 +92,7 @@ function injectStyles() {
     #auth-top-bar::after {
       content: '';
       position: absolute; bottom: -1px; left: 0; right: 0; height: 4px;
-      background: linear-gradient(90deg, #f1c40f, #e67e22, #f1c40f);
+      background: #bf9b53;
     }
 
     #auth-logo {
@@ -174,8 +174,8 @@ function injectStyles() {
 
     .auth-field input:focus,
     .auth-field select:focus {
-      border-color: #004a99;
-      box-shadow: 0 0 0 3px rgba(0,74,153,.1);
+      border-color: #bf9b53;
+      box-shadow: 0 0 0 3px rgba(191,155,83,.16);
     }
 
     .auth-pw-wrap { position: relative; }
@@ -208,23 +208,23 @@ function injectStyles() {
       text-align: center; font-size: .84rem; font-weight: 600; color: #6c757d;
       transition: all .18s; font-family: 'Outfit', sans-serif;
     }
-    .auth-role-pill:hover { border-color: #004a99; color: #004a99; background: #f0f5ff; }
+    .auth-role-pill:hover { border-color: #bf9b53; color: #17251e; background: #f7f1e3; }
     .auth-role-pill.selected {
-      border-color: #004a99; background: #eef4ff; color: #004a99;
-      box-shadow: 0 0 0 3px rgba(0,74,153,.08);
+      border-color: #bf9b53; background: #f7f1e3; color: #17251e;
+      box-shadow: 0 0 0 3px rgba(191,155,83,.14);
     }
 
     .auth-btn {
       width: 100%; padding: .75rem;
-      background: linear-gradient(135deg, #004a99 0%, #0062cc 100%);
-      color: #fff; border: none; border-radius: 8px;
+      background: #17251e;
+      color: #fff; border: 1px solid #bf9b53; border-radius: 0;
       font-size: .95rem; font-weight: 700; cursor: pointer;
       font-family: 'Outfit', sans-serif; letter-spacing: .02em;
       transition: opacity .2s, transform .1s, box-shadow .2s;
       margin-top: .35rem;
-      box-shadow: 0 4px 14px rgba(0,74,153,.3);
+      box-shadow: 0 4px 14px rgba(23,37,30,.22);
     }
-    .auth-btn:hover  { opacity: .9; box-shadow: 0 6px 18px rgba(0,74,153,.4); }
+    .auth-btn:hover  { opacity: 1; background: #bf9b53; color: #17251e; box-shadow: 0 6px 18px rgba(23,37,30,.28); }
     .auth-btn:active { transform: scale(.99); }
 
     #auth-footer {
@@ -540,16 +540,33 @@ function bootApp(user) {
     navbar.appendChild(userBar);
   }
 
-  const switchDropdown = document.getElementById("roleSwitch");
-  if (user.role === "staff") {
-    _switchSection("staff-view");
-    if (switchDropdown) {
-      switchDropdown.disabled = true;
-      switchDropdown.title = "Only principals can switch views";
-      switchDropdown.style.opacity = "0.5";
+  const switchContainer =
+    document.getElementById("roleSwitchContainer");
+
+if (user.role === "staff") {
+
+    // Hide switch view completely
+    if (switchContainer) {
+        switchContainer.classList.add("hidden");
     }
-  } else {
+
+    _switchSection("staff-view");
+
+} else if (user.role === "principal") {
+
+    // Show switch view only to principal
+    if (switchContainer) {
+        switchContainer.classList.remove("hidden");
+    }
+
     _switchSection("principal-view");
+}
+
+  if (typeof window.renderLeaveBalance === "function") {
+    window.renderLeaveBalance();
+  }
+  if (typeof window.renderLeaveBalanceOverview === "function") {
+    window.renderLeaveBalanceOverview();
   }
 }
 

@@ -5,114 +5,121 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TTIC Staff Attendance & Leave Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <style>
-        :root {
-            --ttic-blue: #004a99;
-            --ttic-gold: #f1c40f;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f4f7f9;
-        }
-        .navbar {
-            background-color: var(--ttic-blue);
-            border-bottom: 4px solid var(--ttic-gold);
-        }
-        .card-header {
-            background-color: var(--ttic-blue);
-            color: white;
-            font-weight: 600;
-        }
-        .btn-ttic {
-            background-color: var(--ttic-blue);
-            color: white;
-            transition: 0.3s;
-        }
-        .btn-ttic:hover {
-            background-color: #003366;
-            color: white;
-        }
-        #reader {
-            width: 100%;
-            max-width: 400px;
-            margin: auto;
-            border: 2px solid var(--ttic-blue);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .sidebar-item {
-            cursor: pointer;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        .sidebar-item:hover {
-            background: #e9ecef;
-        }
-        .hidden {
-            display: none;
-        }
-    </style>
 </head>
 <body>
 
     <nav class="navbar navbar-dark shadow-sm">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="#">
-                <img src="images/ttic-logo.png" alt="TTIC Logo" width="40" class="me-2">
-                <span class="fw-bold">Technical Training Institute- Chumey</span>
+                <img src="images/ttic-logo.png" alt="TTIC Logo" width="100" class="me-2 navbar-logo">
+                <span class="fw-bold" style="font-size:1.25rem">Technical Training Institute- Chumey</span>
             </a>
-            <div class="dropdown">
-                <button class="btn btn-outline-light dropdown-toggle" type="button" id="roleSwitch" data-bs-toggle="dropdown">
-                    Switch View
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="showSection('staff-view')">Staff View</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="showSection('principal-view')">Principal View</a></li>
-                </ul>
-            </div>
+            <div class="dropdown hidden" id="roleSwitchContainer">
+    <button class="btn btn-outline-light dropdown-toggle"
+            type="button"
+            id="roleSwitch"
+            data-bs-toggle="dropdown">
+        Switch View
+    </button>
+
+    <ul class="dropdown-menu">
+        <li>
+            <a class="dropdown-item"
+               href="#"
+               onclick="showSection('staff-view')">
+                Staff View
+            </a>
+        </li>
+
+        <li>
+            <a class="dropdown-item"
+               href="#"
+               onclick="showSection('principal-view')">
+                Principal View
+            </a>
+        </li>
+    </ul>
+</div>
         </div>
     </nav>
 
     <div class="container my-4">
-        
         <div id="staff-view" class="section">
             <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-header text-center">QR Attendance</div>
-                        <div class="card-body text-center">
-                            <p class="text-muted small">Scan office QR to mark attendance</p>
-                            <div id="reader"></div>
-                            <div id="scan-success" class="alert alert-success mt-3 hidden">
-                                ✅ Attendance Recorded Automatically!
+                <div class="col-md-12">
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-header staff-card-header">
+                            <span>Apply for Leave</span>
+                            <button type="button" id="leaveBalanceToggle" class="btn btn-outline-light btn-sm">View Leave Balance</button>
+                        </div>
+                        <div id="leaveBalancePanel" class="leave-balance-panel hidden" aria-live="polite">
+                            <div class="text-muted small mb-3">Leave year is July 1 to June 30. Balances reflect the current leave year.</div>
+                            <div class="leave-balance-item">
+                                <span>Annual Leave</span>
+                                <strong id="annualLeaveBalance">0 taken · 21 days left</strong>
+                                <small id="annualLeaveApplications">0 applications</small>
+                            </div>
+                            <div class="leave-balance-item">
+                                <span>Casual Leave</span>
+                                <strong id="casualLeaveBalance">0 taken · 10 days left</strong>
+                                <small id="casualLeaveApplications">0 applications</small>
+                            </div>
+                            <div class="leave-balance-item">
+                                <span>Paternity Leave</span>
+                                <strong id="paternityLeaveBalance">0 taken · 10 days left</strong>
+                                <small id="paternityLeaveApplications">0 applications</small>
+                            </div>
+                            <div class="leave-balance-item">
+                                <span>Bereavement Leave</span>
+                                <strong id="bereavementLeaveBalance">0 taken · 21 days left</strong>
+                                <small id="bereavementLeaveApplications">0 applications</small>
+                            </div>
+                            <div class="leave-balance-item">
+                                <span>Medical Leave</span>
+                                <strong id="medicalLeaveBalance">0 taken · 30 days left</strong>
+                                <small id="medicalLeaveApplications">0 applications</small>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <div class="col-md-8">
-                    <div class="card shadow-sm border-0 mb-4">
-                        <div class="card-header">Apply for Leave</div>
                         <div class="card-body">
                             <form id="leaveForm">
                                 <div class="row mb-3">
                                     <div class="col-md-12 mb-3">
+                                        <label class="form-label">Type of Leave</label>
+                                        <select class="form-select" id="leaveType" name="leave_type" required>
+                                            <option value="" selected disabled>Select leave type</option>
+                                            <option value="annual">Annual Leave (21 days)</option>
+                                            <option value="casual">Casual Leave (10 days)</option>
+                                            <option value="maternity">Maternity Leave</option>
+                                            <option value="paternity">Paternity Leave (10 days)</option>
+                                            <option value="extraordinary">Extraordinary Leave</option>
+                                            <option value="bereavement">Bereavement Leave (21 days)</option>
+                                            <option value="medical">Medical Leave (30 days)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-12 mb-3">
                                         <label class="form-label">Purpose of Leave</label>
-                                        <textarea class="form-control" rows="2" placeholder="Describe the reason for your application..." required></textarea>
+                                        <textarea id="leavePurpose" name="purpose" class="form-control" rows="2" placeholder="Describe the reason for your application..." required></textarea>
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">From Date</label>
-                                        <input type="date" class="form-control" required>
+                                        <input type="date" id="fromDate" name="start_date" class="form-control" required>
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label">To Date</label>
-                                        <input type="date" class="form-control" required>
+                                        <input type="date" id="toDate" name="end_date" class="form-control" required>
+                                    </div>
+                                    <div class="col-md-12 mb-2">
+                                        <label class="form-label">Total Days</label>
+                                        <input type="text" id="leaveDays" name="leave_days" class="form-control" readonly placeholder="—">
+                                    </div>
+                                    <div class="col-md-12">
+                                        <div id="leaveAlert" class="alert alert-danger d-none" role="alert"></div>
                                     </div>
                                     <div class="col-md-12">
                                         <label class="form-label">Attach Documents (Proof)</label>
-                                        <input type="file" class="form-control" accept=".pdf,.jpg,.png">
+                                        <input type="file" id="leaveAttachment" class="form-control" accept=".pdf,.jpg,.png">
                                     </div>
                                 </div>
                                 <button type="submit" class="btn btn-ttic w-100">Submit Application</button>
@@ -125,47 +132,88 @@
 
         <div id="principal-view" class="section hidden">
             <div class="card shadow-sm border-0">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Staff Leave Requests (Principal Approval)</span>
-                    <span class="badge bg-warning text-dark">Pending Actions</span>
+                <div class="card-header principal-card-header py-3">
+                    <span class="principal-card-title">Staff Leave Requests (Principal Approval)</span>
                 </div>
+
+                <div class="leave-records-toolbar">
+                    <span class="leave-records-heading">Leave Applied Records</span>
+                    <div class="principal-report-controls">
+        <div class="report-date-range">
+            <label for="reportFromDate">From</label>
+            <input type="date" id="reportFromDate" class="form-control form-control-sm" title="Include leave from this date" aria-label="Report from date">
+            <label for="reportToDate">To</label>
+            <input type="date" id="reportToDate" class="form-control form-control-sm" title="Include leave until this date" aria-label="Report to date">
+        </div>
+
+        <div class="report-download-actions">
+        <button
+            class="btn btn-success btn-sm me-2"
+            onclick="downloadExcelReport()">
+
+            📊 Download Excel
+
+        </button>
+
+        <button
+            class="btn btn-danger btn-sm"
+            onclick="downloadPDFReport()">
+
+            📄 Download PDF
+
+        </button>
+
+        </div>
+    </div>
+
+</div>
+
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th>Staff Name</th>
+                                <th>Leave Type</th>
                                 <th>Leave Duration</th>
+                                <th>Taken / Balance</th>
                                 <th>Reason</th>
                                 <th>Attachment</th>
                                 <th>Status</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr>
-                                <td><strong>Tashi Dorji</strong></td>
-                                <td>Apr 18 - Apr 20</td>
-                                <td>Family Emergency</td>
-                                <td><a href="#" class="btn btn-sm btn-outline-primary">View Doc</a></td>
-                                <td><span class="badge bg-warning text-dark">Pending</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-success">Approve</button>
-                                    <button class="btn btn-sm btn-danger">Reject</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td><strong>Karma Wangmo</strong></td>
-                                <td>Apr 22 - Apr 22</td>
-                                <td>Medical Checkup</td>
-                                <td><a href="#" class="btn btn-sm btn-outline-primary">View Doc</a></td>
-                                <td><span class="badge bg-warning text-dark">Pending</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-success">Approve</button>
-                                    <button class="btn btn-sm btn-danger">Reject</button>
-                                </td>
-                            </tr>
-                        </tbody>
+                        <tbody id="leaveRequestsBody"></tbody>
                     </table>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-4">
+                <button class="card-header balance-overview-toggle w-100 border-0 d-flex align-items-center justify-content-between"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#leaveBalanceOverviewPanel"
+                        aria-expanded="false"
+                        aria-controls="leaveBalanceOverviewPanel">
+                    <span>Staff Leave Balance Overview</span>
+                    <span aria-hidden="true">⌄</span>
+                </button>
+                <div id="leaveBalanceOverviewPanel" class="collapse">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Staff Name</th>
+                                    <th>Annual Leave (out of 21)</th>
+                                    <th>Casual Leave (out of 10)</th>
+                                    <th>Paternity Leave (out of 10)</th>
+                                    <th>Bereavement Leave (out of 21)</th>
+                                    <th>Medical Leave (out of 30)</th>
+                                    <th>Leave Applications</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaveBalanceOverviewBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -181,31 +229,17 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Section Navigation Logic
-        function showSection(sectionId) {
-            document.querySelectorAll('.section').forEach(sec => sec.classList.add('hidden'));
-            document.getElementById(sectionId).classList.remove('hidden');
-        }
 
-        // Attendance Scanner Logic
-        function onScanSuccess(decodedText) {
-            // Checks if code matches office ID
-            if(decodedText.includes("TTIC_ATTENDANCE")) {
-                document.getElementById('scan-success').classList.remove('hidden');
-                document.getElementById('reader').classList.add('hidden');
-                console.log("Attendance update triggered for: " + decodedText);
-            }
-        }
-
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render(onScanSuccess);
-
-        // Form Submission Logic
-        document.getElementById('leaveForm').onsubmit = function(e) {
-            e.preventDefault();
-            alert("Application submitted successfully to the Principal.");
-            this.reset();
-        };
     </script>
+    <!-- Excel Library -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- PDF Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+<!-- Your custom scripts -->
 <script src="script.js"></script>
 <script src="auth.js"></script>
 </body>
