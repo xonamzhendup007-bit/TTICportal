@@ -477,8 +477,10 @@ async function handleSignup() {
   const pw2 = document.getElementById('signup-pw2').value;
 
   if (!fname || !lname) { _msg('signup-error', 'error', 'Please enter your first and last name.'); return; }
-  if (!email || !email.includes('@')) { _msg('signup-error', 'error', 'Please enter a valid email address.'); return; }
-  if (!email.endsWith('@ttic.edu.gov.bt')) { _msg('signup-error', 'error', 'Email must use the @ttic.edu.gov.bt domain.'); return; }
+  if (!email) { _msg('signup-error', 'error', 'Please enter your email address.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    _msg('signup-error', 'error', 'Please enter a valid email address.'); return;
+  }
   if (pw.length < 6) { _msg('signup-error', 'error', 'Password must be at least 6 characters.'); return; }
   if (pw !== pw2) { _msg('signup-error', 'error', 'Passwords do not match.'); return; }
 

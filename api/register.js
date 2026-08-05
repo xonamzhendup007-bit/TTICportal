@@ -12,10 +12,6 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: 'Missing required registration fields.' });
   }
 
-  if (!email.endsWith('@ttic.edu.gov.bt')) {
-    return res.status(403).json({ error: 'Staff email must use @ttic.edu.gov.bt.' });
-  }
-
   const { data: existing, error: existingError } = await supabase
     .from('staff_users')
     .select('user_id')
