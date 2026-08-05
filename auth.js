@@ -445,7 +445,21 @@ async function handleLogin() {
   if (!email) { _msg('signin-error', 'error', 'Please enter your email address.'); return; }
   if (!password) { _msg('signin-error', 'error', 'Please enter your password.'); return; }
 
-  const { data, error } = await window.supabase.auth.signInWithPassword({ email, password });
+  if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+    _msg('signin-error', 'error', 'Authentication backend not configured. Please set Supabase credentials.');
+    return;
+  }
+
+  let signInResult;
+  try {
+    signInResult = await window.supabase.auth.signInWithPassword({ email, password });
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : 'Network error while contacting authentication server.';
+    _msg('signin-error', 'error', msg);
+    return;
+  }
+
+  const { data, error } = signInResult;
   if (error) {
     _msg('signin-error', 'error', error.message || 'Unable to sign in.');
     return;
@@ -486,11 +500,21 @@ async function handleSignup() {
 
   const fullName = `${fname} ${lname}`;
 
-  const { data: signUpData, error: signUpError } = await window.supabase.auth.signUp({
-    email,
-    password: pw
-  });
+  if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+    _msg('signup-error', 'error', 'Authentication backend not configured. Please set Supabase credentials.');
+    return;
+  }
 
+  let signUpResult;
+  try {
+    signUpResult = await window.supabase.auth.signUp({ email, password: pw });
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : 'Network error while contacting authentication server.';
+    _msg('signup-error', 'error', msg);
+    return;
+  }
+
+  const { data: signUpData, error: signUpError } = signUpResult;
   if (signUpError) {
     _msg('signup-error', 'error', signUpError.message || 'Unable to create account.');
     return;
