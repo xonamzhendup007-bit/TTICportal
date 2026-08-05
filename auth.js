@@ -22,7 +22,33 @@ async function fetchProfile() {
   });
 
   if (!response.ok) return null;
-  return response.json();
+  const p = await response.json();
+  // Normalize to `{ id, name, email, role }` for consistency in the app
+  return {
+    id: p.user_id || p.userId || p.id,
+    name: p.full_name || p.name || '',
+    email: p.official_email || p.email || '',
+    role: p.role || 'staff'
+  };
+}
+
+// --- Dev-mode local user store (used when Supabase is not configured) ---
+const DEV_USERS_KEY = 'ttic_dev_users';
+const DEFAULT_DEV_USERS = [
+  { id: 'staff_001', name: 'Tashi Dorji', email: 'tashi@example.com', password: 'staff123', role: 'staff' },
+  { id: 'staff_002', name: 'Karma Wangmo', email: 'karma@example.com', password: 'staff456', role: 'staff' },
+  { id: 'prin_001',  name: 'Principal Dema', email: 'principal@example.com', password: 'principal789', role: 'principal' },
+];
+
+function getDevUsers() {
+  try {
+    const stored = localStorage.getItem(DEV_USERS_KEY);
+    return stored ? JSON.parse(stored) : DEFAULT_DEV_USERS.slice();
+  } catch (e) { return DEFAULT_DEV_USERS.slice(); }
+}
+
+function saveDevUsers(users) {
+  localStorage.setItem(DEV_USERS_KEY, JSON.stringify(users));
 }
 
 const Auth = {
@@ -446,8 +472,8 @@ async function handleLogin() {
   if (!password) { _msg('signin-error', 'error', 'Please enter your password.'); return; }
 
   if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
-    _msg('signin-error', 'error', 'Authentication backend not configured. Please set Supabase credentials.');
-    return;
+    // Use local dev store for authentication when Supabase is not available.
+    return handleLoginFallback();
   }
 
   let signInResult;
@@ -464,19 +490,50 @@ async function handleLogin() {
     _msg('signin-error', 'error', error.message || 'Unable to sign in.');
     return;
   }
-
-  const profile = await fetchProfile();
-  if (!profile) {
+  const profileRaw = await fetchProfile();
+  if (!profileRaw) {
     _msg('signin-error', 'error', 'Unable to load staff profile after sign in.');
     return;
   }
 
-  _msg('signin-success', 'success', `Welcome back, ${profile.full_name}! Signing you in…`);
+  const profile = {
+    id: profileRaw.id,
+    name: profileRaw.name,
+    email: profileRaw.email,
+    role: profileRaw.role
+  };
+
+  _msg('signin-success', 'success', `Welcome back, ${profile.name}! Signing you in…`);
   setTimeout(() => {
     Auth.login(profile);
     document.getElementById('auth-overlay').remove();
     bootApp(profile);
   }, 900);
+}
+
+// Dev-mode login fallback when Supabase is not configured
+async function handleLoginFallback() {
+  _clearMsg('signin-error', 'signin-success');
+
+  const email = document.getElementById('signin-email').value.trim().toLowerCase();
+  const password = document.getElementById('signin-pw').value.trim();
+
+  if (!email) { _msg('signin-error', 'error', 'Please enter your email address.'); return; }
+  if (!password) { _msg('signin-error', 'error', 'Please enter your password.'); return; }
+
+  const user = getDevUsers().find(u => u.email.toLowerCase() === email && u.password === password);
+  if (!user) {
+    _msg('signin-error', 'error', 'Incorrect email or password.');
+    return;
+  }
+
+  const profile = { id: user.id, name: user.name, email: user.email, role: user.role };
+  _msg('signin-success', 'success', `Welcome back, ${profile.name}! Signing you in…`);
+  setTimeout(() => {
+    Auth.login(profile);
+    document.getElementById('auth-overlay').remove();
+    bootApp(profile);
+  }, 700);
 }
 
 // ── 10. Signup handler ───────────────────────────────────────
@@ -500,23 +557,37 @@ async function handleSignup() {
 
   const fullName = `${fname} ${lname}`;
 
+  // If Supabase is not configured, use a local dev user store for testing.
   if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
-    _msg('signup-error', 'error', 'Authentication backend not configured. Please set Supabase credentials.');
-    return;
-  }
+    // Ensure email uniqueness in dev store
+    const existing = getDevUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existing) { _msg('signup-error', 'error', 'An account with this email already exists.'); return; }
 
-  let signUpResult;
-  try {
-    signUpResult = await window.supabase.auth.signUp({ email, password: pw });
-  } catch (e) {
-    const msg = (e && e.message) ? e.message : 'Network error while contacting authentication server.';
-    _msg('signup-error', 'error', msg);
-    return;
-  }
+    const newUser = {
+      id: `dev_${Date.now()}`,
+      name: fullName,
+      email: email,
+      password: pw,
+      role: role
+    };
+    const users = getDevUsers();
+    users.push(newUser);
+    saveDevUsers(users);
 
-  const { data: signUpData, error: signUpError } = signUpResult;
-  if (signUpError) {
-    _msg('signup-error', 'error', signUpError.message || 'Unable to create account.');
+    _msg('signup-success', 'success', 'Local dev account created! Switch to Sign In to continue.');
+    ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('strength-bar').style.width = '0';
+    document.getElementById('strength-label').textContent = '';
+
+    setTimeout(() => {
+      _clearMsg('signup-success');
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-panel="signin"]').classList.add('active');
+      document.getElementById('panel-signin').classList.add('active');
+    }, 900);
+
     return;
   }
 
@@ -530,6 +601,14 @@ async function handleSignup() {
     _msg('signup-error', 'error', profileError.message || 'Unable to save staff profile.');
     return;
   }
+
+  // Normalize saved profile for consistency (not logging in automatically).
+  const normalized = {
+    id: profileData.user_id || profileData.userId || profileData.id,
+    name: profileData.full_name || profileData.name || fullName,
+    email: profileData.official_email || profileData.email || email,
+    role: profileData.role || role
+  };
 
   _msg('signup-success', 'success', 'Account created! You can now sign in with your new email and password.');
   ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
