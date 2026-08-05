@@ -35,21 +35,12 @@ async function getSessionProfile(req, res) {
 }
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const profile = await getSessionProfile(req, res);
   if (!profile) return;
 
-  const { qr_token } = req.body;
-  const { error } = await supabase
-    .from('attendance_records')
-    .insert([{ user_id: profile.user_id, scan_time: new Date().toISOString(), location_id: qr_token || null }]);
-
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.status(200).json({ success: true });
+  res.status(200).json(profile);
 };

@@ -3,39 +3,39 @@
 // Place <script src="auth.js"></script> LAST before </body>
 // ============================================================
 
-// ── 1. User store (persisted to localStorage) ───────────────
-const USERS = [
-  { id: "staff_001", name: "Tashi Dorji",    email: "tashi.dorji@ttic.edu.gov.bt",    password: "staff123",     role: "staff"     },
-  { id: "staff_002", name: "Karma Wangmo",   email: "karma.wangmo@ttic.edu.gov.bt",   password: "staff456",     role: "staff"     },
-  { id: "prin_001",  name: "Principal Dema", email: "dema.principal@ttic.edu.gov.bt", password: "principal789", role: "principal" },
-];
+// ── 1. Supabase auth helpers ─────────────────────────────────
+async function getAuthHeader() {
+  const { data: sessionData, error: sessionError } = await window.supabase.auth.getSession();
+  if (sessionError || !sessionData?.session?.access_token) {
+    return null;
+  }
 
-function getUsers() {
-  try {
-    const stored = localStorage.getItem("ttic_users");
-    return stored ? JSON.parse(stored) : USERS;
-  } catch { return USERS; }
+  return `Bearer ${sessionData.session.access_token}`;
 }
 
-function saveUsers(users) {
-  localStorage.setItem("ttic_users", JSON.stringify(users));
+async function fetchProfile() {
+  const authHeader = await getAuthHeader();
+  if (!authHeader) return null;
+
+  const response = await fetch('/api/profile', {
+    headers: { Authorization: authHeader }
+  });
+
+  if (!response.ok) return null;
+  return response.json();
 }
 
-if (!localStorage.getItem("ttic_users")) saveUsers(USERS);
-
-// ── 2. Session helpers ──────────────────────────────────────
 const Auth = {
   login(user) {
-    sessionStorage.setItem("ttic_user", JSON.stringify({
-      id: user.id, name: user.name, role: user.role,
-    }));
+    sessionStorage.setItem('ttic_user', JSON.stringify(user));
   },
-  logout() {
-    sessionStorage.removeItem("ttic_user");
+  async logout() {
+    await window.supabase.auth.signOut();
+    sessionStorage.removeItem('ttic_user');
     location.reload();
   },
   current() {
-    const raw = sessionStorage.getItem("ttic_user");
+    const raw = sessionStorage.getItem('ttic_user');
     return raw ? JSON.parse(raw) : null;
   },
   isLoggedIn() { return !!this.current(); },
@@ -268,10 +268,8 @@ function injectLoginModal() {
           <div id="signin-success" class="auth-msg" style="display:none;"></div>
 
           <div class="auth-field">
-            <label for="signin-select">Your name</label>
-            <select id="signin-select">
-              <option value="" disabled selected>Select your name…</option>
-            </select>
+            <label for="signin-email">Email address</label>
+            <input type="email" id="signin-email" placeholder="you@ttic.edu.bt" autocomplete="username">
           </div>
 
           <div class="auth-field">
@@ -345,20 +343,11 @@ function injectLoginModal() {
   `;
   document.body.appendChild(overlay);
   _bindModalEvents();
-  _populateSigninSelect();
 }
 
-// ── 5. Populate sign-in dropdown ────────────────────────────
+// ── 5. No local sign-in dropdown needed when using Supabase auth.
 function _populateSigninSelect() {
-  const sel = document.getElementById("signin-select");
-  if (!sel) return;
-  sel.innerHTML = '<option value="" disabled selected>Select your name…</option>';
-  getUsers().forEach(u => {
-    const opt = document.createElement("option");
-    opt.value = u.id;
-    opt.textContent = `${u.name}  (${u.role})`;
-    sel.appendChild(opt);
-  });
+  // noop
 }
 
 // ── 6. Bind modal events ─────────────────────────────────────
@@ -447,80 +436,87 @@ function _clearMsg(...ids) {
 }
 
 // ── 9. Login handler ─────────────────────────────────────────
-function handleLogin() {
-  _clearMsg("signin-error", "signin-success");
+async function handleLogin() {
+  _clearMsg('signin-error', 'signin-success');
 
-  const selectedId = document.getElementById("signin-select").value;
-  const password   = document.getElementById("signin-pw").value.trim();
+  const email = document.getElementById('signin-email').value.trim().toLowerCase();
+  const password = document.getElementById('signin-pw').value.trim();
 
-  if (!selectedId) { _msg("signin-error", "error", "Please select your name."); return; }
-  if (!password)   { _msg("signin-error", "error", "Please enter your password."); return; }
+  if (!email) { _msg('signin-error', 'error', 'Please enter your email address.'); return; }
+  if (!password) { _msg('signin-error', 'error', 'Please enter your password.'); return; }
 
-  const match = getUsers().find(u => u.id === selectedId && u.password === password);
-
-  if (!match) {
-    _msg("signin-error", "error", "Incorrect password. Please try again.");
-    document.getElementById("signin-pw").value = "";
+  const { data, error } = await window.supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    _msg('signin-error', 'error', error.message || 'Unable to sign in.');
     return;
   }
 
-  _msg("signin-success", "success", `Welcome back, ${match.name}! Signing you in…`);
+  const profile = await fetchProfile();
+  if (!profile) {
+    _msg('signin-error', 'error', 'Unable to load staff profile after sign in.');
+    return;
+  }
+
+  _msg('signin-success', 'success', `Welcome back, ${profile.full_name}! Signing you in…`);
   setTimeout(() => {
-    Auth.login(match);
-    document.getElementById("auth-overlay").remove();
-    bootApp(match);
+    Auth.login(profile);
+    document.getElementById('auth-overlay').remove();
+    bootApp(profile);
   }, 900);
 }
 
 // ── 10. Signup handler ───────────────────────────────────────
-function handleSignup() {
-  _clearMsg("signup-error", "signup-success");
+async function handleSignup() {
+  _clearMsg('signup-error', 'signup-success');
 
-  const fname = document.getElementById("signup-fname").value.trim();
-  const lname = document.getElementById("signup-lname").value.trim();
-  const email = document.getElementById("signup-email").value.trim();
-  const role  = document.querySelector(".auth-role-pill.selected")?.dataset.role || "staff";
-  const pw    = document.getElementById("signup-pw").value;
-  const pw2   = document.getElementById("signup-pw2").value;
+  const fname = document.getElementById('signup-fname').value.trim();
+  const lname = document.getElementById('signup-lname').value.trim();
+  const email = document.getElementById('signup-email').value.trim().toLowerCase();
+  const role = document.querySelector('.auth-role-pill.selected')?.dataset.role || 'staff';
+  const pw = document.getElementById('signup-pw').value;
+  const pw2 = document.getElementById('signup-pw2').value;
 
-  if (!fname || !lname)              { _msg("signup-error", "error", "Please enter your first and last name."); return; }
-  if (!email || !email.includes("@")){ _msg("signup-error", "error", "Please enter a valid email address."); return; }
-  if (pw.length < 6)                 { _msg("signup-error", "error", "Password must be at least 6 characters."); return; }
-  if (pw !== pw2)                    { _msg("signup-error", "error", "Passwords do not match."); return; }
+  if (!fname || !lname) { _msg('signup-error', 'error', 'Please enter your first and last name.'); return; }
+  if (!email || !email.includes('@')) { _msg('signup-error', 'error', 'Please enter a valid email address.'); return; }
+  if (!email.endsWith('@ttic.edu.gov.bt')) { _msg('signup-error', 'error', 'Email must use the @ttic.edu.gov.bt domain.'); return; }
+  if (pw.length < 6) { _msg('signup-error', 'error', 'Password must be at least 6 characters.'); return; }
+  if (pw !== pw2) { _msg('signup-error', 'error', 'Passwords do not match.'); return; }
 
   const fullName = `${fname} ${lname}`;
-  const users = getUsers();
 
-  if (users.find(u => u.name.toLowerCase() === fullName.toLowerCase())) {
-    _msg("signup-error", "error", "An account with this name already exists."); return;
+  const { data: signUpData, error: signUpError } = await window.supabase.auth.signUp({
+    email,
+    password: pw
+  });
+
+  if (signUpError) {
+    _msg('signup-error', 'error', signUpError.message || 'Unable to create account.');
+    return;
   }
 
-  const newUser = {
-    id: `user_${Date.now()}`,
-    name: fullName,
-    email: email,
-    password: pw,
-    role: role,
-  };
+  const { data: profileData, error: profileError } = await window.supabase
+    .from('staff_users')
+    .insert([{ full_name: fullName, official_email: email, role }])
+    .select('*')
+    .single();
 
-  users.push(newUser);
-  saveUsers(users);
+  if (profileError) {
+    _msg('signup-error', 'error', profileError.message || 'Unable to save staff profile.');
+    return;
+  }
 
-  _msg("signup-success", "success", "Account created! Switching you to sign in…");
-
-  ["signup-fname","signup-lname","signup-email","signup-pw","signup-pw2"]
-    .forEach(id => { document.getElementById(id).value = ""; });
-  document.getElementById("strength-bar").style.width = "0";
-  document.getElementById("strength-label").textContent = "";
+  _msg('signup-success', 'success', 'Account created! You can now sign in with your new email and password.');
+  ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('strength-bar').style.width = '0';
+  document.getElementById('strength-label').textContent = '';
 
   setTimeout(() => {
-    _clearMsg("signup-success");
-    document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
-    document.querySelectorAll(".auth-panel").forEach(p => p.classList.remove("active"));
-    document.querySelector('[data-panel="signin"]').classList.add("active");
-    document.getElementById("panel-signin").classList.add("active");
-    _populateSigninSelect();
-    document.getElementById("signin-select").value = newUser.id;
+    _clearMsg('signup-success');
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-panel="signin"]').classList.add('active');
+    document.getElementById('panel-signin').classList.add('active');
   }, 1300);
 }
 
@@ -593,11 +589,25 @@ function _installShowSectionGuard() {
 }
 
 // ── 13. Init ──────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener('DOMContentLoaded', async () => {
   _installShowSectionGuard();
-  if (!Auth.isLoggedIn()) {
+
+  const session = await window.supabase.auth.getSession();
+  if (!session?.data?.session) {
     injectLoginModal();
-  } else {
-    bootApp(Auth.current());
+    return;
   }
+
+  let profile = Auth.current();
+  if (!profile) {
+    profile = await fetchProfile();
+    if (!profile) {
+      await window.supabase.auth.signOut();
+      injectLoginModal();
+      return;
+    }
+    Auth.login(profile);
+  }
+
+  bootApp(profile);
 });

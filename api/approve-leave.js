@@ -1,20 +1,59 @@
-const { createClient } = require('@supabase/supabase-js');
+const supabase = require('./supabase');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+async function getSessionProfile(req, res) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) {
+    res.status(401).json({ error: 'Authorization token is required.' });
+    return null;
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    res.status(401).json({ error: userError?.message || 'Invalid auth token.' });
+    return null;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('staff_users')
+    .select('user_id,full_name,official_email,role')
+    .eq('official_email', userData.user.email)
+    .limit(1)
+    .single();
+
+  if (profileError) {
+    res.status(500).json({ error: profileError.message });
+    return null;
+  }
+
+  if (!profile) {
+    res.status(404).json({ error: 'Staff profile not found.' });
+    return null;
+  }
+
+  return profile;
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { leave_id, decision, principal_key } = req.body;
-  if (principal_key !== process.env.PRINCIPAL_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized Access' });
+  const profile = await getSessionProfile(req, res);
+  if (!profile) return;
+
+  if (profile.role !== 'principal') {
+    return res.status(403).json({ error: 'Only principals may approve leave requests.' });
+  }
+
+  const { leave_id, decision } = req.body;
+  if (!leave_id || !decision || !['Approved', 'Rejected'].includes(decision)) {
+    return res.status(400).json({ error: 'Missing or invalid decision payload.' });
   }
 
   const { error } = await supabase
     .from('leave_applications')
-    .update({ status: decision })
+    .update({ status: decision, reviewed_by: profile.user_id })
     .eq('leave_id', leave_id);
 
   if (error) {

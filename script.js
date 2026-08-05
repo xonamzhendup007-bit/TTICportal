@@ -40,9 +40,20 @@ function normalizeLeaveApplication(record) {
     };
 }
 
+async function getAuthHeader() {
+    const { data: sessionData, error: sessionError } = await window.supabase.auth.getSession();
+    if (sessionError || !sessionData?.session?.access_token) {
+        return null;
+    }
+    return `Bearer ${sessionData.session.access_token}`;
+}
+
 async function fetchLeaveApplicationsFromServer() {
     try {
-        const response = await fetch('/api/leave-applications');
+        const authHeader = await getAuthHeader();
+        const response = await fetch('/api/leave-applications', {
+            headers: authHeader ? { Authorization: authHeader } : {}
+        });
         if (!response.ok) {
             throw new Error(`Server returned ${response.status}`);
         }
@@ -80,10 +91,12 @@ function saveLeaveApplications(applications) {
 
 async function persistLeaveApplication(application) {
     try {
+        const authHeader = await getAuthHeader();
         const response = await fetch('/api/leave-applications', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {})
             },
             body: JSON.stringify(application)
         });
@@ -279,13 +292,16 @@ async function updateLeaveStatus(applicationId, status) {
     }
 
     try {
+        const authHeader = await getAuthHeader();
         const response = await fetch('/api/approve-leave', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {})
+            },
             body: JSON.stringify({
                 leave_id: applicationId,
-                decision: status,
-                principal_key: principalKey
+                decision: status
             })
         });
 
