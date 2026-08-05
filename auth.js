@@ -618,7 +618,22 @@ function _installShowSectionGuard() {
 document.addEventListener('DOMContentLoaded', async () => {
   _installShowSectionGuard();
 
-  const session = await window.supabase.auth.getSession();
+  // If Supabase isn't configured or failed to initialize, show the modal so
+  // users still see the login UI (errors will explain backend misconfiguration).
+  if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+    injectLoginModal();
+    return;
+  }
+
+  let session;
+  try {
+    session = await window.supabase.auth.getSession();
+  } catch (e) {
+    console.warn('Unable to read Supabase session:', e);
+    injectLoginModal();
+    return;
+  }
+
   if (!session?.data?.session) {
     injectLoginModal();
     return;
@@ -628,7 +643,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!profile) {
     profile = await fetchProfile();
     if (!profile) {
-      await window.supabase.auth.signOut();
+      try { await window.supabase.auth.signOut(); } catch {}
       injectLoginModal();
       return;
     }
