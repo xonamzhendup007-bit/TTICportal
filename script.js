@@ -1,29 +1,3 @@
-// ==========================
-// Leave Records Database
-// ==========================
-
-const leaveRecords = [
-
-    {
-        name: "Tashi Dorji",
-        annualLeave: 30,
-        leaveTaken: 3,
-        leaveBalance: 27,
-        reason: "Family Emergency",
-        status: "Approved"
-    },
-
-    {
-        name: "Karma Wangmo",
-        annualLeave: 30,
-        leaveTaken: 1,
-        leaveBalance: 29,
-        reason: "Medical Checkup",
-        status: "Approved"
-    }
-
-];
-
 const LEAVE_APPLICATIONS_KEY = 'ttic_leave_applications';
 const LEAVE_ALLOWANCES = {
     annual: 21,
@@ -269,32 +243,6 @@ function showSection(sectionId) {
     if (target) target.classList.remove('hidden');
 }
 
-// --- QR Scanner Implementation ---
-// The leave portal does not always include the attendance-scanner UI.  Only
-// initialize it when its container is present, so it cannot block other page
-// features (such as the leave-date calculation).
-const readerElement = document.getElementById('reader');
-if (readerElement && typeof Html5Qrcode !== 'undefined') {
-    const html5QrCode = new Html5Qrcode('reader');
-    const qrConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-    const onScanSuccess = (decodedText) => {
-        html5QrCode.stop();
-        readerElement.classList.add('hidden');
-        document.getElementById('scan-success')?.classList.remove('hidden');
-
-        const attendanceData = {
-            qr_token: decodedText,
-            timestamp: new Date().toISOString(),
-            location: 'TTIC_Main_Campus'
-        };
-
-        console.log('Attendance Data Captured:', attendanceData);
-    };
-
-    html5QrCode.start({ facingMode: 'environment' }, qrConfig, onScanSuccess)
-        .catch(error => console.warn('QR scanner could not start:', error));
-}
 
 // --- Leave Form Handling ---
 window.addEventListener('DOMContentLoaded', () => {
