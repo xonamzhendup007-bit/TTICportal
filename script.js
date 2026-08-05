@@ -41,6 +41,9 @@ function normalizeLeaveApplication(record) {
 }
 
 async function getAuthHeader() {
+    if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+        return null;
+    }
     const { data: sessionData, error: sessionError } = await window.supabase.auth.getSession();
     if (sessionError || !sessionData?.session?.access_token) {
         return null;
@@ -49,6 +52,11 @@ async function getAuthHeader() {
 }
 
 async function fetchLeaveApplicationsFromServer() {
+    if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+        console.warn('Supabase is not configured. Skipping server leave fetch.');
+        return [];
+    }
+
     try {
         const authHeader = await getAuthHeader();
         const response = await fetch('/api/leave-applications', {
@@ -90,6 +98,19 @@ function saveLeaveApplications(applications) {
 }
 
 async function persistLeaveApplication(application) {
+    if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+        const savedApplication = normalizeLeaveApplication({
+            ...application,
+            id: application.id || `local_${Date.now()}`,
+            status: application.status || 'Pending',
+            submittedAt: application.submittedAt || new Date().toISOString(),
+        });
+        const applications = getLeaveApplications();
+        applications.push(savedApplication);
+        saveLeaveApplications(applications);
+        return savedApplication;
+    }
+
     try {
         const authHeader = await getAuthHeader();
         const response = await fetch('/api/leave-applications', {

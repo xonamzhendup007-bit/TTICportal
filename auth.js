@@ -51,12 +51,64 @@ function saveDevUsers(users) {
   localStorage.setItem(DEV_USERS_KEY, JSON.stringify(users));
 }
 
+function isSupabaseConfigured() {
+  return !!window.supabase && window.__SUPABASE_CONFIGURED__ !== false;
+}
+
+function injectAppModeBannerStyles() {
+  if (document.getElementById('app-mode-banner-style')) return;
+  const style = document.createElement('style');
+  style.id = 'app-mode-banner-style';
+  style.textContent = `
+    #app-mode-banner {
+      position: sticky;
+      top: 0;
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: .75rem 1rem;
+      font-family: 'Outfit', sans-serif;
+      font-size: .88rem;
+      color: #fff;
+      text-align: center;
+      background: #0d6efd;
+      border-bottom: 1px solid rgba(255,255,255,.2);
+    }
+    #app-mode-banner.warning { background: #d63384; }
+    #app-mode-banner.success { background: #198754; }
+    #app-mode-banner small { display: block; font-size: .78rem; opacity: .85; margin-top: .15rem; }
+  `;
+  document.head.appendChild(style);
+}
+
+function showAppModeBanner() {
+  injectAppModeBannerStyles();
+  if (document.getElementById('app-mode-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'app-mode-banner';
+  if (isSupabaseConfigured()) {
+    banner.className = 'success';
+    banner.innerHTML = '<strong>Live Supabase mode:</strong> Shared authentication and data enabled.';
+  } else {
+    banner.className = 'warning';
+    banner.innerHTML = '<strong>Development mode:</strong> Supabase is not configured. Data is stored locally and not shared between browsers. Set SUPABASE_URL and SUPABASE_ANON_KEY in Vercel env vars.';
+  }
+  document.body.prepend(banner);
+}
+
 const Auth = {
   login(user) {
     sessionStorage.setItem('ttic_user', JSON.stringify(user));
   },
   async logout() {
-    await window.supabase.auth.signOut();
+    if (window.supabase && window.supabase.auth && typeof window.supabase.auth.signOut === 'function') {
+      try {
+        await window.supabase.auth.signOut();
+      } catch (e) {
+        console.warn('Supabase sign out failed:', e);
+      }
+    }
     sessionStorage.removeItem('ttic_user');
     location.reload();
   },
@@ -696,6 +748,7 @@ function _installShowSectionGuard() {
 // ── 13. Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   _installShowSectionGuard();
+  showAppModeBanner();
 
   // If Supabase isn't configured or failed to initialize, show the modal so
   // users still see the login UI (errors will explain backend misconfiguration).

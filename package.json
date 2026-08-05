@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "postinstall": "node scripts/generate-supabase-client.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
