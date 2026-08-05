@@ -5,9 +5,9 @@
 
 // ── 1. User store (persisted to localStorage) ───────────────
 const USERS = [
-  { id: "staff_001", name: "Tashi Dorji",    password: "staff123",     role: "staff"     },
-  { id: "staff_002", name: "Karma Wangmo",   password: "staff456",     role: "staff"     },
-  { id: "prin_001",  name: "Principal Dema", password: "principal789", role: "principal" },
+  { id: "staff_001", name: "Tashi Dorji",    email: "tashi.dorji@ttic.edu.gov.bt",    password: "staff123",     role: "staff"     },
+  { id: "staff_002", name: "Karma Wangmo",   email: "karma.wangmo@ttic.edu.gov.bt",   password: "staff456",     role: "staff"     },
+  { id: "prin_001",  name: "Principal Dema", email: "dema.principal@ttic.edu.gov.bt", password: "principal789", role: "principal" },
 ];
 
 function getUsers() {

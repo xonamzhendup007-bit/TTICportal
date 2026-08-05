@@ -7,6 +7,99 @@ const LEAVE_ALLOWANCES = {
     medical: 30
 };
 const LEAVE_YEAR_START_MONTH = 7; // July
+let cachedLeaveApplications = [];
+
+function parseDateFromIso(dateString) {
+    if (!dateString) return null;
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+}
+
+function computeDays(startDate, endDate) {
+    const start = parseDateFromIso(startDate);
+    const end = parseDateFromIso(endDate);
+    if (!start || !end || start > end) return 0;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.floor((end - start) / msPerDay) + 1;
+}
+
+function normalizeLeaveApplication(record) {
+    return {
+        id: record.leave_id || record.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        staffName: record.staff_name || record.staffName || record.staff_users?.full_name || 'Staff member',
+        staffEmail: record.staff_email || record.staffEmail || record.staff_users?.official_email || '',
+        leaveType: record.leave_type || record.leaveType || '',
+        purpose: record.reason || record.purpose || '',
+        fromDate: record.start_date || record.fromDate || '',
+        toDate: record.end_date || record.toDate || '',
+        totalDays: record.total_days || record.totalDays || computeDays(record.start_date || record.fromDate, record.end_date || record.toDate),
+        attachmentName: record.document_url ? record.document_url.split('/').pop() : (record.attachmentName || 'No attachment'),
+        status: record.status || 'Pending',
+        submittedAt: record.applied_at || record.submittedAt || '',
+        decidedAt: record.decided_at || record.decidedAt || null
+    };
+}
+
+async function fetchLeaveApplicationsFromServer() {
+    try {
+        const response = await fetch('/api/leave-applications');
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+        const data = await response.json();
+        return Array.isArray(data) ? data.map(normalizeLeaveApplication) : [];
+    } catch (error) {
+        console.warn('Unable to load leave applications from server:', error);
+        return [];
+    }
+}
+
+async function refreshLeaveApplications() {
+    const serverApplications = await fetchLeaveApplicationsFromServer();
+    if (serverApplications.length) {
+        cachedLeaveApplications = serverApplications;
+        localStorage.setItem(LEAVE_APPLICATIONS_KEY, JSON.stringify(serverApplications));
+    } else {
+        try {
+            cachedLeaveApplications = JSON.parse(localStorage.getItem(LEAVE_APPLICATIONS_KEY)) || [];
+        } catch {
+            cachedLeaveApplications = [];
+        }
+    }
+    return cachedLeaveApplications;
+}
+
+function getLeaveApplications() {
+    return cachedLeaveApplications;
+}
+
+function saveLeaveApplications(applications) {
+    cachedLeaveApplications = applications;
+    localStorage.setItem(LEAVE_APPLICATIONS_KEY, JSON.stringify(applications));
+}
+
+async function persistLeaveApplication(application) {
+    try {
+        const response = await fetch('/api/leave-applications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(application)
+        });
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || payload?.message || response.statusText);
+        }
+
+        const savedApplication = await response.json();
+        return normalizeLeaveApplication(savedApplication);
+    } catch (error) {
+        console.error('Failed to persist leave application:', error);
+        throw error;
+    }
+}
 
 function getLeaveYearBounds(referenceDate = new Date()) {
     const year = referenceDate.getUTCMonth() + 1 >= LEAVE_YEAR_START_MONTH
@@ -24,18 +117,6 @@ function getOverlapDays(start, end, rangeStart, rangeEnd) {
     if (!overlapStart || !overlapEnd || overlapStart > overlapEnd) return 0;
     const msPerDay = 24 * 60 * 60 * 1000;
     return Math.floor((overlapEnd - overlapStart) / msPerDay) + 1;
-}
-
-function getLeaveApplications() {
-    try {
-        return JSON.parse(localStorage.getItem(LEAVE_APPLICATIONS_KEY)) || [];
-    } catch {
-        return [];
-    }
-}
-
-function saveLeaveApplications(applications) {
-    localStorage.setItem(LEAVE_APPLICATIONS_KEY, JSON.stringify(applications));
 }
 
 function formatLeaveDate(dateString) {
@@ -187,17 +268,39 @@ function renderLeaveRequests() {
     });
 }
 
-function updateLeaveStatus(applicationId, status) {
+async function updateLeaveStatus(applicationId, status) {
     const applications = getLeaveApplications();
     const application = applications.find(item => item.id === applicationId);
     if (!application || application.status !== 'Pending') return;
 
-    application.status = status;
-    application.decidedAt = new Date().toISOString();
-    saveLeaveApplications(applications);
-    renderLeaveRequests();
-    renderLeaveBalance();
-    renderLeaveBalanceOverview();
+    const principalKey = window.prompt('Enter the principal approval key to confirm this decision:');
+    if (!principalKey) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/approve-leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                leave_id: applicationId,
+                decision: status,
+                principal_key: principalKey
+            })
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => null);
+            throw new Error(errorPayload?.error || response.statusText || 'Unable to update leave status');
+        }
+
+        await refreshLeaveApplications();
+        renderLeaveRequests();
+        renderLeaveBalance();
+        renderLeaveBalanceOverview();
+    } catch (error) {
+        alert(`Unable to update leave status: ${error.message}`);
+    }
 }
 
 function getReportApplications() {
@@ -245,7 +348,7 @@ function showSection(sectionId) {
 
 
 // --- Leave Form Handling ---
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     const leaveForm = document.getElementById('leaveForm');
     const leaveTypeEl = document.getElementById('leaveType');
     const fromDateEl = document.getElementById('fromDate');
@@ -285,32 +388,35 @@ window.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // All validations passed — submit (client-side placeholder)
             const leaveBalance = getLeaveBalance(user?.name || 'Staff member', leaveType);
             if (leaveBalance && diffDays > leaveBalance.balance) {
                 alert(`You have only ${leaveBalance.balance} ${leaveType} leave day${leaveBalance.balance === 1 ? '' : 's'} remaining.`);
                 return;
             }
 
-            const applications = getLeaveApplications();
-            applications.unshift({
-                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                staffName: user?.name || 'Staff member',
-                leaveType,
-                purpose: formData.get('purpose')?.trim() || '',
-                fromDate,
-                toDate,
-                totalDays: diffDays,
-                attachmentName: document.getElementById('leaveAttachment')?.files[0]?.name || '',
-                status: 'Pending',
-                submittedAt: new Date().toISOString()
-            });
-            saveLeaveApplications(applications);
-            renderLeaveRequests();
-            renderLeaveBalance();
-            renderLeaveBalanceOverview();
-            alert('Application submitted! The Principal will review your attached documents.');
-            form.reset();
+            try {
+                await persistLeaveApplication({
+                    staff_name: user?.name || 'Staff member',
+                    staff_email: user?.email || '',
+                    leave_type: leaveType,
+                    reason: formData.get('purpose')?.trim() || '',
+                    start_date: fromDate,
+                    end_date: toDate,
+                    total_days: diffDays,
+                    document_url: document.getElementById('leaveAttachment')?.files[0]?.name || '',
+                    status: 'Pending',
+                    applied_at: new Date().toISOString()
+                });
+
+                await refreshLeaveApplications();
+                renderLeaveRequests();
+                renderLeaveBalance();
+                renderLeaveBalanceOverview();
+                alert('Application submitted! The Principal will review your attached documents.');
+                form.reset();
+            } catch (error) {
+                alert(`Unable to submit application: ${error.message}`);
+            }
         });
     }
 
@@ -338,6 +444,7 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    await refreshLeaveApplications();
     updateLeaveInfo();
     renderLeaveRequests();
     renderLeaveBalance();

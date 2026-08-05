@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
   const { error } = await supabase
     .from('leave_applications')
     .update({ status: decision })
-    .eq('id', leave_id);
+    .eq('leave_id', leave_id);
 
   if (error) {
     return res.status(500).json({ error: error.message });
