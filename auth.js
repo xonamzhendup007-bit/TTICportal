@@ -25,7 +25,7 @@ async function fetchProfile() {
   const p = await response.json();
   // Normalize to `{ id, name, email, role }` for consistency in the app
   return {
-    id: p.user_id || p.userId || p.id,
+    id: p.id || p.userId || p.user_id,
     name: `${p.first_name || ''}${p.last_name ? ` ${p.last_name}` : ''}`.trim() || p.name || '',
     email: p.email || '',
     role: p.role || 'staff'

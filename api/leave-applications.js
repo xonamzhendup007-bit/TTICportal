@@ -16,8 +16,8 @@ async function getSessionProfile(req, res) {
 
   const { data: profile, error: profileError } = await supabase
     .from('staff_users')
-    .select('id:user_id,first_name,last_name,email,role')
-    .eq('email', userData.user.email)
+    .select('id,first_name,last_name,email,role')
+    .eq('id', userData.user.id)
     .limit(1)
     .single();
 
@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
       .order('applied_at', { ascending: false });
 
     if (profile.role !== 'principal') {
-      query.eq('user_id', profile.user_id);
+      query.eq('user_id', profile.id);
     }
 
     const { data, error } = await query;
@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
       .from('leave_applications')
       .insert([
         {
-          user_id: profile.user_id,
+          user_id: profile.id,
           leave_type,
           start_date,
           end_date,

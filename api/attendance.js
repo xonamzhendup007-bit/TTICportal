@@ -16,8 +16,8 @@ async function getSessionProfile(req, res) {
 
   const { data: profile, error: profileError } = await supabase
     .from('staff_users')
-    .select('id:user_id,first_name,last_name,email,role')
-    .eq('email', userData.user.email)
+    .select('id,first_name,last_name,email,role')
+    .eq('id', userData.user.id)
     .limit(1)
     .single();
 
@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
   const { qr_token } = req.body;
   const { error } = await supabase
     .from('attendance_records')
-    .insert([{ user_id: profile.user_id, scan_time: new Date().toISOString(), location_id: qr_token || null }]);
+    .insert([{ user_id: profile.id, scan_time: new Date().toISOString(), location_id: qr_token || null }]);
 
   if (error) {
     return res.status(500).json({ error: error.message });

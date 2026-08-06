@@ -16,8 +16,8 @@ async function getSessionProfile(req, res) {
 
   const { data: profile, error: profileError } = await supabase
     .from('staff_users')
-    .select('id:user_id,first_name,last_name,email,role')
-    .eq('email', userData.user.email)
+    .select('id,first_name,last_name,email,role')
+    .eq('id', userData.user.id)
     .limit(1)
     .single();
 
@@ -53,7 +53,7 @@ module.exports = async (req, res) => {
 
   const { error } = await supabase
     .from('leave_applications')
-    .update({ status: decision, reviewed_by: profile.user_id })
+    .update({ status: decision, reviewed_by: profile.id })
     .eq('leave_id', leave_id);
 
   if (error) {
