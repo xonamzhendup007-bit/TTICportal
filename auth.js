@@ -644,77 +644,54 @@ async function handleSignup() {
     return;
   }
 
-  const { data: signUpData, error: signUpError } = await window.supabase.auth.signUp({ email, password: pw });
-  if (signUpError) {
-    _msg('signup-error', 'error', signUpError.message || 'Unable to create authentication account.');
-    return;
-  }
-
-  let user = signUpData?.user;
-  if (!user) {
-    _msg('signup-error', 'error', 'Unable to create user account.');
-    return;
-  }
-
-  // If Supabase does not return a session immediately after signUp,
-  // most Supabase projects require email confirmation. In that case
-  // do not attempt to call `/api/register` yet — require the user to
-  // confirm their email and then sign in. This keeps the server-side
-  // flow strict and avoids creating profiles without an authenticated
-  // session.
-  if (!signUpData.session) {
-    _msg('signup-success', 'success', 'Account created. Please check your email and confirm your account before signing in.');
-    ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
-      .forEach(id => { document.getElementById(id).value = ''; });
-    document.getElementById('strength-bar').style.width = '0';
-    document.getElementById('strength-label').textContent = '';
-
-    setTimeout(() => {
-      _clearMsg('signup-success');
-      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
-      document.querySelector('[data-panel="signin"]').classList.add('active');
-      document.getElementById('panel-signin').classList.add('active');
-    }, 1300);
-
-    return;
-  }
-
-  const session = await window.supabase.auth.getSession();
-  const token = session?.data?.session?.access_token;
-  if (!token) {
-    _msg('signup-error', 'error', 'Unable to obtain session token after signup.');
-    return;
-  }
-
-  const registerResponse = await fetch('/api/register', {
+  const adminResponse = await fetch('/api/admin-create-user', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ id: user.id, first_name: fname, last_name: lname, email, role })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pw, first_name: fname, last_name: lname, role })
   });
 
-  if (!registerResponse.ok) {
-    const errorBody = await registerResponse.json().catch(() => null);
-    _msg('signup-error', 'error', errorBody?.error || 'Unable to save staff profile.');
+  if (!adminResponse.ok) {
+    const errorBody = await adminResponse.json().catch(() => null);
+    _msg('signup-error', 'error', errorBody?.error || 'Unable to create account.');
     return;
   }
 
-  _msg('signup-success', 'success', 'Account created! You can now sign in with your new email and password.');
+  const adminData = await adminResponse.json();
+  if (!adminData?.user?.email) {
+    _msg('signup-error', 'error', 'Unable to create confirmed account.');
+    return;
+  }
+
+  const signInResult = await window.supabase.auth.signInWithPassword({ email, password: pw });
+  if (signInResult.error) {
+    _msg('signup-error', 'error', signInResult.error.message || 'Unable to sign in after account creation.');
+    return;
+  }
+
+  const profileRaw = await fetchProfile();
+  if (!profileRaw) {
+    _msg('signup-error', 'error', 'Unable to load staff profile after sign in.');
+    return;
+  }
+
+  const profile = {
+    id: profileRaw.id,
+    name: profileRaw.name,
+    email: profileRaw.email,
+    role: profileRaw.role
+  };
+
+  _msg('signup-success', 'success', `Account created! Welcome, ${profile.name}. Signing you in…`);
   ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
     .forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('strength-bar').style.width = '0';
   document.getElementById('strength-label').textContent = '';
 
   setTimeout(() => {
-    _clearMsg('signup-success');
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
-    document.querySelector('[data-panel="signin"]').classList.add('active');
-    document.getElementById('panel-signin').classList.add('active');
-  }, 1300);
+    Auth.login(profile);
+    document.getElementById('auth-overlay').remove();
+    bootApp(profile);
+  }, 900);
 }
 
 // ── 11. Boot app after login ──────────────────────────────────
