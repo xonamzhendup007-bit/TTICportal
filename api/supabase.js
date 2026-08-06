@@ -1,8 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
 
+// Server-side Supabase client. Expects environment variables to be set in
+// your hosting environment (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`).
 const supabase = createClient(
-  process.env.https://fodirjdugwpobnbfweem.supabase.co,
-  process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvZGlyamR1Z3dwb2JuYmZ3ZWVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNjQ2NjYsImV4cCI6MjA5Nzk0MDY2Nn0.cQuCBn24HzAAUJ9HrSILEqXresKp_aS7MkfAM9ebU1M || process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvZGlyamR1Z3dwb2JuYmZ3ZWVtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjM2NDY2NiwiZXhwIjoyMDk3OTQwNjY2fQ.z-jULnKcPeKzp8NuMTIJJJRDgZFwfvDLhMyZcRJkDTI
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
 module.exports = supabase;

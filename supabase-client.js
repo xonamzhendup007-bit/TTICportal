@@ -1,6 +1,6 @@
 // Replace these values with your Supabase project URL and public anon key.
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL = 'https://fodirjdugwpobnbfweem.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvZGlyamR1Z3dwb2JuYmZ3ZWVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNjQ2NjYsImV4cCI6MjA5Nzk0MDY2Nn0.cQuCBn24HzAAUJ9HrSILEqXresKp_aS7MkfAM9ebU1M';
 
 // Quick runtime checks to help developers debug "Failed to fetch" errors.
 const _isPlaceholderUrl = SUPABASE_URL.includes('YOUR_PROJECT_ID') || SUPABASE_URL.includes('YOUR_PROJECT_ID');
