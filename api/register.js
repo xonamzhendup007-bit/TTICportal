@@ -5,11 +5,27 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) {
+    return res.status(401).json({ error: 'Authorization token is required.' });
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return res.status(401).json({ error: userError?.message || 'Invalid auth token.' });
+  }
+
+  const user = userData.user;
   const { first_name, last_name, email, role } = req.body;
   const normalizedEmail = email?.toString().trim().toLowerCase();
 
   if (!first_name || !last_name || !normalizedEmail || !role) {
     return res.status(400).json({ error: 'Missing required registration fields.' });
+  }
+
+  if (normalizedEmail !== user.email) {
+    return res.status(400).json({ error: 'Registration email must match authenticated user email.' });
   }
 
   const { data: existing, error: existingError } = await supabase
@@ -29,7 +45,7 @@ module.exports = async (req, res) => {
 
   const { data, error } = await supabase
     .from('staff_users')
-    .insert([{ first_name, last_name, email: normalizedEmail, role }])
+    .insert([{ id: user.id, first_name, last_name, email: normalizedEmail, role }])
     .select('*')
     .single();
 

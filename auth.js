@@ -643,24 +643,48 @@ async function handleSignup() {
     return;
   }
 
-  const { data: profileData, error: profileError } = await window.supabase
-    .from('staff_users')
-    .insert([{ first_name: fname, last_name: lname, email: email, role }])
-    .select('*')
-    .single();
-
-  if (profileError) {
-    _msg('signup-error', 'error', profileError.message || 'Unable to save staff profile.');
+  const { data: signUpData, error: signUpError } = await window.supabase.auth.signUp({ email, password: pw });
+  if (signUpError) {
+    _msg('signup-error', 'error', signUpError.message || 'Unable to create authentication account.');
     return;
   }
 
-  // Normalize saved profile for consistency (not logging in automatically).
-  const normalized = {
-    id: profileData.id,
-    name: `${profileData.first_name || fname} ${profileData.last_name || lname}`,
-    email: profileData.email || email,
-    role: profileData.role || role
-  };
+  let user = signUpData?.user;
+  if (!user) {
+    _msg('signup-error', 'error', 'Unable to create user account.');
+    return;
+  }
+
+  if (!signUpData.session) {
+    const { data: signInData, error: signInError } = await window.supabase.auth.signInWithPassword({ email, password: pw });
+    if (signInError) {
+      _msg('signup-error', 'error', signInError.message || 'Unable to sign in after account creation.');
+      return;
+    }
+    user = signInData?.user || user;
+  }
+
+  const session = await window.supabase.auth.getSession();
+  const token = session?.data?.session?.access_token;
+  if (!token) {
+    _msg('signup-error', 'error', 'Unable to obtain session token after signup.');
+    return;
+  }
+
+  const registerResponse = await fetch('/api/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ first_name: fname, last_name: lname, email, role })
+  });
+
+  if (!registerResponse.ok) {
+    const errorBody = await registerResponse.json().catch(() => null);
+    _msg('signup-error', 'error', errorBody?.error || 'Unable to save staff profile.');
+    return;
+  }
 
   _msg('signup-success', 'success', 'Account created! You can now sign in with your new email and password.');
   ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
