@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
   if (req.method === 'GET') {
     const query = supabase
       .from('leave_applications')
-      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(first_name,last_name,email,role)')
+      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at')
       .order('applied_at', { ascending: false });
 
     if (profile.role !== 'principal') {
@@ -53,7 +53,26 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(200).json(data || []);
+    const apps = data || [];
+    if (apps.length === 0) return res.status(200).json([]);
+
+    const userIds = [...new Set(apps.map(a => a.user_id).filter(Boolean))];
+    const { data: users, error: usersError } = await supabase
+      .from('staff_users')
+      .select('id,first_name,last_name,email,role')
+      .in('id', userIds);
+
+    if (usersError) {
+      return res.status(500).json({ error: usersError.message });
+    }
+
+    const usersById = Object.fromEntries((users || []).map(u => [u.id, u]));
+    const mapped = apps.map(app => ({
+      ...app,
+      staff_users: usersById[app.user_id] || null
+    }));
+
+    return res.status(200).json(mapped);
   }
 
   if (req.method === 'POST') {
@@ -62,7 +81,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Missing required leave application fields.' });
     }
 
-    const { data, error } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from('leave_applications')
       .insert([
         {
@@ -76,14 +95,27 @@ module.exports = async (req, res) => {
           applied_at: new Date().toISOString()
         }
       ])
-      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(first_name,last_name,email,role)')
+      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at')
       .single();
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
+    if (insertError) {
+      return res.status(500).json({ error: insertError.message });
     }
 
-    return res.status(201).json(data);
+    const app = inserted;
+    const { data: userRow, error: userErr } = await supabase
+      .from('staff_users')
+      .select('id,first_name,last_name,email,role')
+      .eq('id', app.user_id)
+      .limit(1)
+      .single();
+
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    return res.status(201).json({ ...app, staff_users: userRow || null });
+  }
   }
 
   res.setHeader('Allow', ['GET', 'POST']);

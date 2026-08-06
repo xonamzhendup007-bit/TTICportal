@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
   const { qr_token } = req.body;
   const { error } = await supabase
     .from('attendance_records')
-    .insert([{ user_id: profile.id, scan_time: new Date().toISOString(), location_id: qr_token || null }]);
+    .insert([{ staff_id: profile.id, scan_time: new Date().toISOString(), location_id: qr_token || null }]);
 
   if (error) {
     return res.status(500).json({ error: error.message });
