@@ -343,7 +343,8 @@ function injectLoginModal() {
         <!-- Sign In Panel -->
         <div class="auth-panel active" id="panel-signin">
           <div id="signin-error"   class="auth-msg" style="display:none;"></div>
-          <div id="signin-success" class="auth-msg" style="display:none;"></div>
+            <div id="signin-success" class="auth-msg" style="display:none;"></div>
+            <div id="signin-hint" style="font-size:.86rem;color:#6c757d;margin-bottom:.6rem;">If you just created an account, please check your email and confirm your account before signing in.</div>
 
           <div class="auth-field">
             <label for="signin-email">Email address</label>
@@ -655,13 +656,28 @@ async function handleSignup() {
     return;
   }
 
+  // If Supabase does not return a session immediately after signUp,
+  // most Supabase projects require email confirmation. In that case
+  // do not attempt to call `/api/register` yet — require the user to
+  // confirm their email and then sign in. This keeps the server-side
+  // flow strict and avoids creating profiles without an authenticated
+  // session.
   if (!signUpData.session) {
-    const { data: signInData, error: signInError } = await window.supabase.auth.signInWithPassword({ email, password: pw });
-    if (signInError) {
-      _msg('signup-error', 'error', signInError.message || 'Unable to sign in after account creation.');
-      return;
-    }
-    user = signInData?.user || user;
+    _msg('signup-success', 'success', 'Account created. Please check your email and confirm your account before signing in.');
+    ['signup-fname','signup-lname','signup-email','signup-pw','signup-pw2']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('strength-bar').style.width = '0';
+    document.getElementById('strength-label').textContent = '';
+
+    setTimeout(() => {
+      _clearMsg('signup-success');
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-panel="signin"]').classList.add('active');
+      document.getElementById('panel-signin').classList.add('active');
+    }, 1300);
+
+    return;
   }
 
   const session = await window.supabase.auth.getSession();
@@ -677,7 +693,7 @@ async function handleSignup() {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ first_name: fname, last_name: lname, email, role })
+    body: JSON.stringify({ id: user.id, first_name: fname, last_name: lname, email, role })
   });
 
   if (!registerResponse.ok) {
