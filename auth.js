@@ -26,8 +26,8 @@ async function fetchProfile() {
   // Normalize to `{ id, name, email, role }` for consistency in the app
   return {
     id: p.user_id || p.userId || p.id,
-    name: p.full_name || p.name || '',
-    email: p.official_email || p.email || '',
+    name: `${p.first_name || ''}${p.last_name ? ` ${p.last_name}` : ''}`.trim() || p.name || '',
+    email: p.email || '',
     role: p.role || 'staff'
   };
 }
@@ -645,7 +645,7 @@ async function handleSignup() {
 
   const { data: profileData, error: profileError } = await window.supabase
     .from('staff_users')
-    .insert([{ full_name: fullName, official_email: email, role }])
+    .insert([{ first_name: fname, last_name: lname, email: email, role }])
     .select('*')
     .single();
 
@@ -656,9 +656,9 @@ async function handleSignup() {
 
   // Normalize saved profile for consistency (not logging in automatically).
   const normalized = {
-    id: profileData.user_id || profileData.userId || profileData.id,
-    name: profileData.full_name || profileData.name || fullName,
-    email: profileData.official_email || profileData.email || email,
+    id: profileData.id,
+    name: `${profileData.first_name || fname} ${profileData.last_name || lname}`,
+    email: profileData.email || email,
     role: profileData.role || role
   };
 

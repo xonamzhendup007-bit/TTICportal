@@ -26,8 +26,8 @@ function computeDays(startDate, endDate) {
 function normalizeLeaveApplication(record) {
     return {
         id: record.leave_id || record.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        staffName: record.staff_name || record.staffName || record.staff_users?.full_name || 'Staff member',
-        staffEmail: record.staff_email || record.staffEmail || record.staff_users?.official_email || '',
+        staffName: record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member'),
+        staffEmail: record.staff_email || record.staffEmail || record.staff_users?.email || '',
         leaveType: record.leave_type || record.leaveType || '',
         purpose: record.reason || record.purpose || '',
         fromDate: record.start_date || record.fromDate || '',

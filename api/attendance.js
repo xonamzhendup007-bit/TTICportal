@@ -16,8 +16,8 @@ async function getSessionProfile(req, res) {
 
   const { data: profile, error: profileError } = await supabase
     .from('staff_users')
-    .select('user_id,full_name,official_email,role')
-    .eq('official_email', userData.user.email)
+    .select('id:user_id,first_name,last_name,email,role')
+    .eq('email', userData.user.email)
     .limit(1)
     .single();
 

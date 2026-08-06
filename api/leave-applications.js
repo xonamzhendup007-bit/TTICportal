@@ -16,8 +16,8 @@ async function getSessionProfile(req, res) {
 
   const { data: profile, error: profileError } = await supabase
     .from('staff_users')
-    .select('user_id,full_name,official_email,role')
-    .eq('official_email', userData.user.email)
+    .select('id:user_id,first_name,last_name,email,role')
+    .eq('email', userData.user.email)
     .limit(1)
     .single();
 
@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
   if (req.method === 'GET') {
     const query = supabase
       .from('leave_applications')
-      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(full_name,official_email,role)')
+      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(first_name,last_name,email,role)')
       .order('applied_at', { ascending: false });
 
     if (profile.role !== 'principal') {
@@ -76,7 +76,7 @@ module.exports = async (req, res) => {
           applied_at: new Date().toISOString()
         }
       ])
-      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(full_name,official_email,role)')
+      .select('leave_id,user_id,leave_type,start_date,end_date,reason,document_url,status,reviewed_by,applied_at,staff_users(first_name,last_name,email,role)')
       .single();
 
     if (error) {

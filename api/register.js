@@ -5,17 +5,17 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { full_name, official_email, role } = req.body;
-  const email = official_email?.toString().trim().toLowerCase();
+  const { first_name, last_name, email, role } = req.body;
+  const normalizedEmail = email?.toString().trim().toLowerCase();
 
-  if (!full_name || !email || !role) {
+  if (!first_name || !last_name || !normalizedEmail || !role) {
     return res.status(400).json({ error: 'Missing required registration fields.' });
   }
 
   const { data: existing, error: existingError } = await supabase
     .from('staff_users')
-    .select('user_id')
-    .eq('official_email', email)
+    .select('id')
+    .eq('email', normalizedEmail)
     .limit(1)
     .single();
 
@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
 
   const { data, error } = await supabase
     .from('staff_users')
-    .insert([{ full_name, official_email: email, role }])
+    .insert([{ first_name, last_name, email: normalizedEmail, role }])
     .select('*')
     .single();
 

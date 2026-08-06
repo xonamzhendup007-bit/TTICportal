@@ -12,7 +12,7 @@ const supabase = createClient(url, anon);
 
 (async () => {
   try {
-    const { data, error } = await supabase.from('staff_users').select('user_id,full_name,official_email').limit(1);
+    const { data, error } = await supabase.from('staff_users').select('id,first_name,last_name,email').limit(1);
     if (error) {
       console.error('Query error:', error.message || error);
       process.exit(2);
