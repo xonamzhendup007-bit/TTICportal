@@ -108,6 +108,39 @@ on public.attendance_records for select
 using (public.is_principal());
 
 -- --------------------------------------------------------
+-- 6. leave_applications
+-- --------------------------------------------------------
+drop table if exists public.leave_applications cascade;
+
+create table public.leave_applications (
+  leave_id    uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.staff_users(id) on delete cascade,
+  leave_type  text not null,
+  start_date  date not null,
+  end_date    date not null,
+  reason      text,
+  document_url text,
+  status      text default 'Pending',
+  reviewed_by uuid references public.staff_users(id),
+  applied_at  timestamptz not null default now()
+);
+
+alter table public.leave_applications enable row level security;
+
+create policy "Staff can view own leave applications"
+on public.leave_applications for select
+using (auth.uid() = user_id or public.is_principal());
+
+create policy "Staff can insert own leave applications"
+on public.leave_applications for insert
+with check (auth.uid() = user_id);
+
+create policy "Principals can update leave applications"
+on public.leave_applications for update
+using (public.is_principal());
+
+
+-- --------------------------------------------------------
 -- 6. Force PostgREST to pick up the new tables immediately
 -- --------------------------------------------------------
 notify pgrst, 'reload schema';
