@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.https://fodirjdugwpobnbfweem.supabase.co;
+const SERVICE_ROLE = process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvZGlyamR1Z3dwb2JuYmZ3ZWVtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjM2NDY2NiwiZXhwIjoyMDk3OTQwNjY2fQ.z-jULnKcPeKzp8NuMTIJJJRDgZFwfvDLhMyZcRJkDTI;
 
 if (!SUPABASE_URL) {
   throw new Error('SUPABASE_URL must be set for server endpoints.');
