@@ -65,6 +65,14 @@ for each row execute function public.set_updated_at();
 alter table public.staff_users enable row level security;
 alter table public.attendance_records enable row level security;
 
+create or replace function public.is_principal()
+returns boolean as $$
+  select exists (
+    select 1 from public.staff_users su
+    where su.id = auth.uid() and su.role = 'principal'
+  );
+$$ language sql security definer;
+
 -- staff_users policies
 create policy "Users can view their own profile"
 on public.staff_users for select
@@ -80,12 +88,7 @@ using (auth.uid() = id);
 
 create policy "Principals can view all staff"
 on public.staff_users for select
-using (
-  exists (
-    select 1 from public.staff_users su
-    where su.id = auth.uid() and su.role = 'principal'
-  )
-);
+using (public.is_principal());
 
 -- attendance_records policies
 create policy "Staff can view own attendance"
@@ -102,12 +105,7 @@ using (auth.uid() = staff_id);
 
 create policy "Principals can view all attendance"
 on public.attendance_records for select
-using (
-  exists (
-    select 1 from public.staff_users su
-    where su.id = auth.uid() and su.role = 'principal'
-  )
-);
+using (public.is_principal());
 
 -- --------------------------------------------------------
 -- 6. Force PostgREST to pick up the new tables immediately
