@@ -1,5 +1,60 @@
 const supabase = require('./supabase');
 
+// Leave year constants
+const LEAVE_YEAR_START_MONTH = 7; // July
+const LEAVE_YEAR_END_MONTH = 6;   // June
+
+// Base allowances per leave type
+const LEAVE_ALLOWANCES = {
+  annual: 21,
+  casual: 10,
+  paternity: 10,
+  bereavement: 21,
+  medical: 30
+};
+
+/**
+ * Calculate the previous leave year bounds.
+ * Leave year: 1 July to 30 June.
+ * If today is 07 Aug 2026 → previous year: 01 Jul 2025 to 30 Jun 2026
+ * If today is 15 Feb 2027 → previous year: 01 Jul 2025 to 30 Jun 2026
+ * If today is 20 Jul 2027 → previous year: 01 Jul 2026 to 30 Jun 2027
+ */
+function getPreviousLeaveYear(referenceDate = new Date()) {
+  const month = referenceDate.getUTCMonth() + 1; // 1-12
+  const year = referenceDate.getUTCFullYear();
+
+  // If current month >= July, the current leave year started this July.
+  // The previous leave year is the one before that.
+  // If current month < July, the current leave year started last July.
+  // The previous leave year is the one before that.
+  const currentLeaveYearStartYear = month >= LEAVE_YEAR_START_MONTH ? year : year - 1;
+  const previousLeaveYearStartYear = currentLeaveYearStartYear - 1;
+
+  const start = new Date(Date.UTC(previousLeaveYearStartYear, LEAVE_YEAR_START_MONTH - 1, 1)); // 1 July
+  const end = new Date(Date.UTC(previousLeaveYearStartYear + 1, LEAVE_YEAR_END_MONTH, 30));    // 30 June
+
+  return { start, end };
+}
+
+function formatDate(date) {
+  return date.toISOString().split('T')[0];
+}
+
+function parseDate(dateString) {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function getOverlapDays(start, end, rangeStart, rangeEnd) {
+  const overlapStart = start > rangeStart ? start : rangeStart;
+  const overlapEnd = end < rangeEnd ? end : rangeEnd;
+  if (!overlapStart || !overlapEnd || overlapStart > overlapEnd) return 0;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((overlapEnd - overlapStart) / msPerDay) + 1;
+}
+
 async function getSessionProfile(req, res) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
@@ -34,6 +89,40 @@ async function getSessionProfile(req, res) {
   return profile;
 }
 
+/**
+ * Calculate unused leave for a staff member for a given leave type
+ * within the previous leave year.
+ * unused = allowance - taken (approved leave in that year)
+ */
+async function calculateUnusedLeave(userId, leaveType, yearStart, yearEnd) {
+  const allowance = LEAVE_ALLOWANCES[leaveType];
+  if (!allowance) return 0;
+
+  const { data: applications, error } = await supabase
+    .from('leave_applications')
+    .select('start_date,end_date,status')
+    .eq('user_id', userId)
+    .eq('leave_type', leaveType)
+    .in('status', ['Approved', 'Pending']);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rangeStart = parseDate(formatDate(yearStart));
+  const rangeEnd = parseDate(formatDate(yearEnd));
+
+  let taken = 0;
+  (applications || []).forEach(app => {
+    const leaveStart = parseDate(app.start_date);
+    const leaveEnd = parseDate(app.end_date);
+    if (!leaveStart || !leaveEnd) return;
+    taken += getOverlapDays(leaveStart, leaveEnd, rangeStart, rangeEnd);
+  });
+
+  return Math.max(allowance - taken, 0);
+}
+
 module.exports = async (req, res) => {
   const profile = await getSessionProfile(req, res);
   if (!profile) return;
@@ -42,7 +131,7 @@ module.exports = async (req, res) => {
   if (req.method === 'GET') {
     const query = supabase
       .from('leave_balance_requests')
-      .select('id,user_id,leave_type,requested_days,year_start,year_end,reason,status,reviewed_by,applied_at,decided_at')
+      .select('id,user_id,leave_type,year_start,year_end,unused_days,requested_days,approved_days,leave_balance,reason,status,reviewed_by,approved_by,applied_at,decided_at,approval_date')
       .order('applied_at', { ascending: false });
 
     if (profile.role !== 'principal') {
@@ -76,12 +165,12 @@ module.exports = async (req, res) => {
     return res.status(200).json(mapped);
   }
 
-  // ── POST: staff submits a leave balance request ───────────
+  // ── POST: staff submits a carry-forward balance request ───
   if (req.method === 'POST') {
-    const { leave_type, requested_days, year_start, year_end, reason } = req.body;
+    const { leave_type, requested_days, reason } = req.body;
 
-    if (!leave_type || !requested_days || !year_start || !year_end) {
-      return res.status(400).json({ error: 'Missing required fields: leave_type, requested_days, year_start, year_end.' });
+    if (!leave_type || !requested_days) {
+      return res.status(400).json({ error: 'Missing required fields: leave_type and requested_days.' });
     }
 
     const days = parseInt(requested_days, 10);
@@ -90,22 +179,31 @@ module.exports = async (req, res) => {
     }
 
     // Validate leave type against known allowances
-    const validTypes = ['annual', 'casual', 'paternity', 'bereavement', 'medical'];
+    const validTypes = Object.keys(LEAVE_ALLOWANCES);
     if (!validTypes.includes(leave_type)) {
       return res.status(400).json({ error: 'Invalid leave type.' });
     }
 
-    // Validate year range: must be within the past one year
-    const start = new Date(year_start);
-    const end = new Date(year_end);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-      return res.status(400).json({ error: 'Invalid year range.' });
+    // Auto-calculate the previous leave year — never accept user-supplied dates
+    const prevYear = getPreviousLeaveYear();
+    const yearStart = formatDate(prevYear.start);
+    const yearEnd = formatDate(prevYear.end);
+
+    // Calculate unused leave from the previous leave year
+    let unusedDays;
+    try {
+      unusedDays = await calculateUnusedLeave(profile.id, leave_type, yearStart, yearEnd);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
 
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    if (start < oneYearAgo) {
-      return res.status(400).json({ error: 'Year range cannot be older than the past one year.' });
+    if (unusedDays <= 0) {
+      return res.status(400).json({ error: 'No unused leave available from the previous leave year to carry forward.' });
+    }
+
+    // User cannot request more days than the unused leave available
+    if (days > unusedDays) {
+      return res.status(400).json({ error: `Requested days (${days}) cannot exceed unused leave available (${unusedDays} days).` });
     }
 
     const { data: inserted, error: insertError } = await supabase
@@ -114,15 +212,18 @@ module.exports = async (req, res) => {
         {
           user_id: profile.id,
           leave_type,
+          year_start: yearStart,
+          year_end: yearEnd,
+          unused_days: unusedDays,
           requested_days: days,
-          year_start: year_start,
-          year_end: year_end,
+          approved_days: 0,
+          leave_balance: 0, // Pending → leave balance stays 0
           reason: reason || null,
           status: 'Pending',
           applied_at: new Date().toISOString()
         }
       ])
-      .select('id,user_id,leave_type,requested_days,year_start,year_end,reason,status,reviewed_by,applied_at,decided_at')
+      .select('id,user_id,leave_type,year_start,year_end,unused_days,requested_days,approved_days,leave_balance,reason,status,reviewed_by,approved_by,applied_at,decided_at,approval_date')
       .single();
 
     if (insertError) {
@@ -156,7 +257,7 @@ module.exports = async (req, res) => {
 
     const { data: existing, error: fetchError } = await supabase
       .from('leave_balance_requests')
-      .select('id,status')
+      .select('id,status,requested_days,leave_balance')
       .eq('id', id)
       .limit(1)
       .single();
@@ -173,20 +274,56 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'This request has already been decided.' });
     }
 
-    const { error: updateError } = await supabase
+    const now = new Date().toISOString();
+
+    if (decision === 'Approved') {
+      // ── APPROVED: update leave balance immediately ─────────
+      // Use a transaction to ensure data consistency.
+      const { data: updated, error: updateError } = await supabase
+        .from('leave_balance_requests')
+        .update({
+          status: 'Approved',
+          reviewed_by: profile.id,
+          approved_by: profile.id,
+          decided_at: now,
+          approval_date: now,
+          approved_days: existing.requested_days,
+          leave_balance: existing.requested_days // Only Approved adds to leave balance
+        })
+        .eq('id', id)
+        .select('id,status,approved_days,leave_balance,approval_date,approved_by')
+        .single();
+
+      if (updateError) {
+        return res.status(500).json({ error: updateError.message });
+      }
+
+      return res.status(200).json({
+        message: 'Leave balance request Approved',
+        approved_days: updated.approved_days,
+        leave_balance: updated.leave_balance,
+        approval_date: updated.approval_date,
+        approved_by: updated.approved_by
+      });
+    }
+
+    // ── REJECTED: only update status, leave balance stays 0 ──
+    const { error: rejectError } = await supabase
       .from('leave_balance_requests')
       .update({
-        status: decision,
+        status: 'Rejected',
         reviewed_by: profile.id,
-        decided_at: new Date().toISOString()
+        decided_at: now,
+        approved_days: 0,
+        leave_balance: 0 // ← Rejected: leave balance remains 0
       })
       .eq('id', id);
 
-    if (updateError) {
-      return res.status(500).json({ error: updateError.message });
+    if (rejectError) {
+      return res.status(500).json({ error: rejectError.message });
     }
 
-    return res.status(200).json({ message: `Leave balance request ${decision}` });
+    return res.status(200).json({ message: 'Leave balance request Rejected' });
   }
 
   res.setHeader('Allow', ['GET', 'POST', 'PUT']);

@@ -140,23 +140,36 @@ on public.leave_applications for update
 using (public.is_principal());
 
 -- --------------------------------------------------------
--- 7. leave_balance_requests — staff request additional leave
---    balance for the past one year, principal approves/rejects
+-- 7. leave_balance_requests — carry-forward leave approval
+--    workflow. Unused leave from the previous leave year
+--    (1 July – 30 June) can only be used after Principal
+--    approval. Pending/Rejected requests do NOT add to
+--    leave balance. Only Approved requests add approved_days.
 -- --------------------------------------------------------
 drop table if exists public.leave_balance_requests cascade;
 
 create table public.leave_balance_requests (
-  id            uuid primary key default gen_random_uuid(),
-  user_id       uuid not null references public.staff_users(id) on delete cascade,
-  leave_type    text not null,
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references public.staff_users(id) on delete cascade,
+  leave_type     text not null,
+  -- Previous leave year (auto-calculated, never user-editable)
+  year_start     date not null,
+  year_end       date not null,
+  -- Unused leave available from the previous leave year (read-only)
+  unused_days    integer not null default 0 check (unused_days >= 0),
+  -- Days the staff member is requesting to carry forward
   requested_days integer not null check (requested_days > 0),
-  year_start    date not null,
-  year_end      date not null,
-  reason        text,
-  status        text default 'Pending',
-  reviewed_by   uuid references public.staff_users(id),
-  applied_at    timestamptz not null default now(),
-  decided_at    timestamptz
+  -- Approved days (set only when status = 'Approved')
+  approved_days  integer not null default 0 check (approved_days >= 0),
+  -- Leave balance added to the staff member (0 unless Approved)
+  leave_balance  integer not null default 0 check (leave_balance >= 0),
+  reason         text,
+  status         text default 'Pending',
+  reviewed_by    uuid references public.staff_users(id),
+  approved_by    uuid references public.staff_users(id),
+  applied_at     timestamptz not null default now(),
+  decided_at     timestamptz,
+  approval_date  timestamptz
 );
 
 alter table public.leave_balance_requests enable row level security;

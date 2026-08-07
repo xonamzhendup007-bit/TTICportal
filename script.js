@@ -8,6 +8,7 @@ const LEAVE_ALLOWANCES = {
     medical: 30
 };
 const LEAVE_YEAR_START_MONTH = 7; // July
+const LEAVE_YEAR_END_MONTH = 6;   // June
 let cachedLeaveApplications = [];
 let cachedBalanceRequests = [];
 
@@ -147,6 +148,32 @@ function getLeaveYearBounds(referenceDate = new Date()) {
     return { start, end };
 }
 
+/**
+ * Calculate the previous leave year bounds.
+ * Leave year: 1 July to 30 June.
+ * If today is 07 Aug 2026 → previous year: 01 Jul 2025 to 30 Jun 2026
+ * If today is 15 Feb 2027 → previous year: 01 Jul 2025 to 30 Jun 2026
+ * If today is 20 Jul 2027 → previous year: 01 Jul 2026 to 30 Jun 2027
+ */
+function getPreviousLeaveYear(referenceDate = new Date()) {
+    const month = referenceDate.getUTCMonth() + 1; // 1-12
+    const year = referenceDate.getUTCFullYear();
+
+    // Current leave year started in July of this year (if month >= July)
+    // or July of last year (if month < July)
+    const currentLeaveYearStartYear = month >= LEAVE_YEAR_START_MONTH ? year : year - 1;
+    const previousLeaveYearStartYear = currentLeaveYearStartYear - 1;
+
+    const start = new Date(Date.UTC(previousLeaveYearStartYear, LEAVE_YEAR_START_MONTH - 1, 1)); // 1 July
+    const end = new Date(Date.UTC(previousLeaveYearStartYear + 1, LEAVE_YEAR_END_MONTH, 30));    // 30 June
+
+    return { start, end };
+}
+
+function formatDate(date) {
+    return date.toISOString().split('T')[0];
+}
+
 function getOverlapDays(start, end, rangeStart, rangeEnd) {
     const overlapStart = start > rangeStart ? start : rangeStart;
     const overlapEnd = end < rangeEnd ? end : rangeEnd;
@@ -172,13 +199,18 @@ function normalizeBalanceRequest(record) {
         staffName: record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member'),
         staffEmail: record.staff_email || record.staffEmail || record.staff_users?.email || '',
         leaveType: record.leave_type || record.leaveType || '',
-        requestedDays: record.requested_days || record.requestedDays || 0,
         yearStart: record.year_start || record.yearStart || '',
         yearEnd: record.year_end || record.yearEnd || '',
+        unusedDays: record.unused_days || record.unusedDays || 0,
+        requestedDays: record.requested_days || record.requestedDays || 0,
+        approvedDays: record.approved_days || record.approvedDays || 0,
+        leaveBalance: record.leave_balance || record.leaveBalance || 0,
         reason: record.reason || '',
         status: record.status || 'Pending',
         submittedAt: record.applied_at || record.submittedAt || '',
-        decidedAt: record.decided_at || record.decidedAt || null
+        decidedAt: record.decided_at || record.decidedAt || null,
+        approvalDate: record.approval_date || record.approvalDate || null,
+        approvedBy: record.approved_by || record.approvedBy || null
     };
 }
 
@@ -276,9 +308,9 @@ function renderBalanceRequests() {
     if (requests.length === 0) {
         const row = requestsBody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 7;
+        cell.colSpan = 8;
         cell.className = 'text-center text-muted py-4';
-        cell.textContent = 'No leave balance requests are awaiting a decision.';
+        cell.textContent = 'No carry forward leave requests are awaiting a decision.';
         return;
     }
 
@@ -289,10 +321,11 @@ function renderBalanceRequests() {
         staffName.textContent = request.staffName;
         staffNameCell.appendChild(staffName);
         row.insertCell().textContent = formatLeaveType(request.leaveType);
-        row.insertCell().textContent = `${request.requestedDays} day${request.requestedDays === 1 ? '' : 's'}`;
         row.insertCell().textContent = request.yearStart && request.yearEnd
             ? `${formatLeaveDate(request.yearStart)} - ${formatLeaveDate(request.yearEnd)}`
             : '—';
+        row.insertCell().textContent = `${request.unusedDays} day${request.unusedDays === 1 ? '' : 's'}`;
+        row.insertCell().textContent = `${request.requestedDays} day${request.requestedDays === 1 ? '' : 's'}`;
         row.insertCell().textContent = request.reason || '—';
 
         const statusCell = row.insertCell();
@@ -383,8 +416,9 @@ function getLeaveBalance(staffName, leaveType) {
     }, 0);
 
     // Add approved balance requests to the allowance
+    // Only Approved requests add to leave balance (leaveBalance field)
     const approvedRequests = getApprovedBalanceRequests(staffName, leaveType);
-    const extraBalance = approvedRequests.reduce((total, request) => total + (request.requestedDays || 0), 0);
+    const extraBalance = approvedRequests.reduce((total, request) => total + (request.leaveBalance || 0), 0);
     const effectiveAllowance = allowance + extraBalance;
 
     return { allowance: effectiveAllowance, taken, balance: Math.max(effectiveAllowance - taken, 0), applications: applications.length };
@@ -599,18 +633,58 @@ window.addEventListener('DOMContentLoaded', async () => {
     const balanceRequestForm = document.getElementById('balanceRequestForm');
     const balanceRequestLeaveType = document.getElementById('balanceRequestLeaveType');
     const balanceRequestDays = document.getElementById('balanceRequestDays');
-    const balanceRequestYearStart = document.getElementById('balanceRequestYearStart');
-    const balanceRequestYearEnd = document.getElementById('balanceRequestYearEnd');
+    const balanceRequestYearDisplay = document.getElementById('balanceRequestYearDisplay');
+    const balanceRequestUnusedDisplay = document.getElementById('balanceRequestUnusedDisplay');
     const balanceRequestReason = document.getElementById('balanceRequestReason');
     const balanceRequestAlert = document.getElementById('balanceRequestAlert');
 
-    // Set default year range to the past one year
-    if (balanceRequestYearStart && balanceRequestYearEnd) {
-        const today = new Date();
-        const oneYearAgo = new Date(today);
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        balanceRequestYearStart.value = oneYearAgo.toISOString().split('T')[0];
-        balanceRequestYearEnd.value = today.toISOString().split('T')[0];
+    // Auto-calculate and display the previous leave year (read-only)
+    const prevYear = getPreviousLeaveYear();
+    if (balanceRequestYearDisplay) {
+        balanceRequestYearDisplay.value = `${formatLeaveDate(formatDate(prevYear.start))} - ${formatLeaveDate(formatDate(prevYear.end))}`;
+    }
+
+    // Calculate and display unused leave when leave type changes
+    const updateUnusedLeaveDisplay = () => {
+        const leaveType = balanceRequestLeaveType?.value;
+        if (!leaveType || !balanceRequestUnusedDisplay) {
+            if (balanceRequestUnusedDisplay) balanceRequestUnusedDisplay.value = '—';
+            return;
+        }
+
+        const user = typeof Auth !== 'undefined' ? Auth.current() : null;
+        if (!user) {
+            balanceRequestUnusedDisplay.value = '—';
+            return;
+        }
+
+        // Calculate unused leave from the previous leave year
+        const prevYearBounds = getPreviousLeaveYear();
+        const allowance = LEAVE_ALLOWANCES[leaveType];
+        if (!allowance) {
+            balanceRequestUnusedDisplay.value = '—';
+            return;
+        }
+
+        // Count taken leave in the previous leave year
+        const applications = getLeaveApplications().filter(application =>
+            application.staffName === user.name
+            && application.leaveType === leaveType
+            && application.status !== 'Rejected'
+        );
+        const taken = applications.reduce((total, application) => {
+            const leaveStart = parseDateFromIso(application.fromDate);
+            const leaveEnd = parseDateFromIso(application.toDate);
+            if (!leaveStart || !leaveEnd) return total;
+            return total + getOverlapDays(leaveStart, leaveEnd, prevYearBounds.start, prevYearBounds.end);
+        }, 0);
+
+        const unused = Math.max(allowance - taken, 0);
+        balanceRequestUnusedDisplay.value = `${unused} day${unused === 1 ? '' : 's'}`;
+    };
+
+    if (balanceRequestLeaveType) {
+        balanceRequestLeaveType.addEventListener('change', updateUnusedLeaveDisplay);
     }
 
     // Balance request form submission
@@ -626,8 +700,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
             const leaveType = balanceRequestLeaveType?.value;
             const requestedDays = parseInt(balanceRequestDays?.value || '0', 10);
-            const yearStart = balanceRequestYearStart?.value;
-            const yearEnd = balanceRequestYearEnd?.value;
             const reason = balanceRequestReason?.value?.trim() || '';
 
             if (!leaveType) {
@@ -646,41 +718,33 @@ window.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Validate requested days does not exceed the base allowance
-            const baseAllowance = LEAVE_ALLOWANCES[leaveType];
-            if (baseAllowance && requestedDays > baseAllowance) {
+            // Validate requested days does not exceed unused leave available
+            const prevYearBounds = getPreviousLeaveYear();
+            const allowance = LEAVE_ALLOWANCES[leaveType];
+            const applications = getLeaveApplications().filter(application =>
+                application.staffName === user.name
+                && application.leaveType === leaveType
+                && application.status !== 'Rejected'
+            );
+            const taken = applications.reduce((total, application) => {
+                const leaveStart = parseDateFromIso(application.fromDate);
+                const leaveEnd = parseDateFromIso(application.toDate);
+                if (!leaveStart || !leaveEnd) return total;
+                return total + getOverlapDays(leaveStart, leaveEnd, prevYearBounds.start, prevYearBounds.end);
+            }, 0);
+            const unusedDays = Math.max(allowance - taken, 0);
+
+            if (unusedDays <= 0) {
                 if (balanceRequestAlert) {
-                    balanceRequestAlert.textContent = `Requested days cannot exceed the base allowance of ${baseAllowance} days for ${formatLeaveType(leaveType)}.`;
+                    balanceRequestAlert.textContent = 'No unused leave available from the previous leave year to carry forward.';
                     balanceRequestAlert.classList.remove('d-none');
                 }
                 return;
             }
 
-            if (!yearStart || !yearEnd) {
+            if (requestedDays > unusedDays) {
                 if (balanceRequestAlert) {
-                    balanceRequestAlert.textContent = 'Please select both year start and year end dates.';
-                    balanceRequestAlert.classList.remove('d-none');
-                }
-                return;
-            }
-
-            const start = new Date(yearStart);
-            const end = new Date(yearEnd);
-            if (start > end) {
-                if (balanceRequestAlert) {
-                    balanceRequestAlert.textContent = 'Year start must be before year end.';
-                    balanceRequestAlert.classList.remove('d-none');
-                }
-                return;
-            }
-
-            // Validate the year range is within the past one year
-            const today = new Date();
-            const oneYearAgo = new Date(today);
-            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-            if (start < oneYearAgo) {
-                if (balanceRequestAlert) {
-                    balanceRequestAlert.textContent = 'Year range cannot be older than the past one year.';
+                    balanceRequestAlert.textContent = `Requested days (${requestedDays}) cannot exceed unused leave available (${unusedDays} days).`;
                     balanceRequestAlert.classList.remove('d-none');
                 }
                 return;
@@ -697,8 +761,6 @@ window.addEventListener('DOMContentLoaded', async () => {
                     staff_email: user.email,
                     leave_type: leaveType,
                     requested_days: requestedDays,
-                    year_start: yearStart,
-                    year_end: yearEnd,
                     reason: reason,
                     status: 'Pending',
                     applied_at: new Date().toISOString()
@@ -708,15 +770,14 @@ window.addEventListener('DOMContentLoaded', async () => {
                 renderBalanceRequests();
                 renderLeaveBalance();
                 renderLeaveBalanceOverview();
-                alert('Balance request submitted! The Principal will review your request.');
+                alert('Carry forward request submitted! The Principal will review your request.');
                 balanceRequestForm.reset();
-                // Reset year range to past one year after form reset
-                if (balanceRequestYearStart && balanceRequestYearEnd) {
-                    const today = new Date();
-                    const oneYearAgo = new Date(today);
-                    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-                    balanceRequestYearStart.value = oneYearAgo.toISOString().split('T')[0];
-                    balanceRequestYearEnd.value = today.toISOString().split('T')[0];
+                // Re-display the previous leave year after form reset
+                if (balanceRequestYearDisplay) {
+                    balanceRequestYearDisplay.value = `${formatLeaveDate(formatDate(prevYear.start))} - ${formatLeaveDate(formatDate(prevYear.end))}`;
+                }
+                if (balanceRequestUnusedDisplay) {
+                    balanceRequestUnusedDisplay.value = '—';
                 }
             } catch (error) {
                 if (balanceRequestAlert) {
@@ -764,7 +825,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (leaveBalance && diffDays > leaveBalance.balance) {
-                alert(`You have only ${leaveBalance.balance} ${leaveType} leave day${leaveBalance.balance === 1 ? '' : 's'} remaining.`);
+                alert('Insufficient leave balance.');
                 return;
             }
 
@@ -882,6 +943,12 @@ function checkLeaveLimits() {
 
     if (effectiveAllowance && diffDays > effectiveAllowance) {
         leaveAlert.textContent = `Leave exceeds allowed ${formatLeaveType(leaveType)} (${effectiveAllowance} days).`;
+        leaveAlert.classList.remove('d-none');
+        return false;
+    }
+
+    if (balance && diffDays > balance.balance) {
+        leaveAlert.textContent = 'Insufficient leave balance.';
         leaveAlert.classList.remove('d-none');
         return false;
     }
