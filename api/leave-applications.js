@@ -116,7 +116,6 @@ module.exports = async (req, res) => {
 
     return res.status(201).json({ ...app, staff_users: userRow || null });
   }
-  }
 
   res.setHeader('Allow', ['GET', 'POST']);
   return res.status(405).json({ error: 'Method not allowed' });
