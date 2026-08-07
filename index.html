@@ -129,6 +129,53 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Leave Balance Request Card (Staff) -->
+                <div class="col-md-12">
+                    <div class="card shadow-sm border-0 balance-request-card">
+                        <div class="card-header staff-card-header">
+                            <span>Request Additional Leave Balance</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-muted small mb-3">Request additional leave balance for the past one year. The Principal must approve your request before the balance is added to your leave type.</div>
+                            <form id="balanceRequestForm">
+                                <div class="row mb-3">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Leave Type</label>
+                                        <select class="form-select" id="balanceRequestLeaveType" required>
+                                            <option value="" selected disabled>Select leave type</option>
+                                            <option value="annual">Annual Leave</option>
+                                            <option value="casual">Casual Leave</option>
+                                            <option value="paternity">Paternity Leave</option>
+                                            <option value="bereavement">Bereavement Leave</option>
+                                            <option value="medical">Medical Leave</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Requested Days</label>
+                                        <input type="number" id="balanceRequestDays" class="form-control" min="1" max="365" placeholder="e.g. 5" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Year Start</label>
+                                        <input type="date" id="balanceRequestYearStart" class="form-control" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Year End</label>
+                                        <input type="date" id="balanceRequestYearEnd" class="form-control" required>
+                                    </div>
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label">Reason</label>
+                                        <textarea id="balanceRequestReason" class="form-control" rows="2" placeholder="Explain why you need additional leave balance..." required></textarea>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <div id="balanceRequestAlert" class="alert alert-danger d-none" role="alert"></div>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-ttic w-100">Submit Balance Request</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -216,6 +263,29 @@
                             <tbody id="leaveBalanceOverviewBody"></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- Leave Balance Requests (Principal Approval) -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-header principal-card-header py-3">
+                    <span class="principal-card-title">Leave Balance Requests (Principal Approval)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Staff Name</th>
+                                <th>Leave Type</th>
+                                <th>Requested Days</th>
+                                <th>Year Period</th>
+                                <th>Reason</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="balanceRequestsBody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>

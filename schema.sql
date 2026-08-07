@@ -139,8 +139,41 @@ create policy "Principals can update leave applications"
 on public.leave_applications for update
 using (public.is_principal());
 
+-- --------------------------------------------------------
+-- 7. leave_balance_requests — staff request additional leave
+--    balance for the past one year, principal approves/rejects
+-- --------------------------------------------------------
+drop table if exists public.leave_balance_requests cascade;
+
+create table public.leave_balance_requests (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references public.staff_users(id) on delete cascade,
+  leave_type    text not null,
+  requested_days integer not null check (requested_days > 0),
+  year_start    date not null,
+  year_end      date not null,
+  reason        text,
+  status        text default 'Pending',
+  reviewed_by   uuid references public.staff_users(id),
+  applied_at    timestamptz not null default now(),
+  decided_at    timestamptz
+);
+
+alter table public.leave_balance_requests enable row level security;
+
+create policy "Staff can view own leave balance requests"
+on public.leave_balance_requests for select
+using (auth.uid() = user_id or public.is_principal());
+
+create policy "Staff can insert own leave balance requests"
+on public.leave_balance_requests for insert
+with check (auth.uid() = user_id);
+
+create policy "Principals can update leave balance requests"
+on public.leave_balance_requests for update
+using (public.is_principal());
 
 -- --------------------------------------------------------
--- 6. Force PostgREST to pick up the new tables immediately
+-- 8. Force PostgREST to pick up the new tables immediately
 -- --------------------------------------------------------
 notify pgrst, 'reload schema';

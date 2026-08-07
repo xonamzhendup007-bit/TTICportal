@@ -143,6 +143,8 @@ button:active:not(:disabled),
 .leave-balance-item { padding: 1rem 1.5rem; background: #faf7ef; }
 .leave-balance-item span, .leave-balance-item small { display: block; color: var(--ink-soft); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .leave-balance-item strong { display: block; margin: .25rem 0; color: var(--ink); font-family: 'Playfair Display', Georgia, serif; font-size: 1.05rem; }
+.balance-request-card { border-top: 3px solid var(--gold) !important; }
+.balance-request-card .card-header { background: var(--ink-soft) !important; }
 .form-label {
     color: var(--ink-soft);
     font-size: .73rem;

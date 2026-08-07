@@ -1,4 +1,5 @@
 const LEAVE_APPLICATIONS_KEY = 'ttic_leave_applications';
+const LEAVE_BALANCE_REQUESTS_KEY = 'ttic_leave_balance_requests';
 const LEAVE_ALLOWANCES = {
     annual: 21,
     casual: 10,
@@ -8,6 +9,7 @@ const LEAVE_ALLOWANCES = {
 };
 const LEAVE_YEAR_START_MONTH = 7; // July
 let cachedLeaveApplications = [];
+let cachedBalanceRequests = [];
 
 function parseDateFromIso(dateString) {
     if (!dateString) return null;
@@ -164,6 +166,205 @@ function formatLeaveType(leaveType) {
     return leaveType ? `${leaveType.charAt(0).toUpperCase()}${leaveType.slice(1)} Leave` : 'Leave';
 }
 
+function normalizeBalanceRequest(record) {
+    return {
+        id: record.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        staffName: record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member'),
+        staffEmail: record.staff_email || record.staffEmail || record.staff_users?.email || '',
+        leaveType: record.leave_type || record.leaveType || '',
+        requestedDays: record.requested_days || record.requestedDays || 0,
+        yearStart: record.year_start || record.yearStart || '',
+        yearEnd: record.year_end || record.yearEnd || '',
+        reason: record.reason || '',
+        status: record.status || 'Pending',
+        submittedAt: record.applied_at || record.submittedAt || '',
+        decidedAt: record.decided_at || record.decidedAt || null
+    };
+}
+
+async function fetchBalanceRequestsFromServer() {
+    if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+        console.warn('Supabase is not configured. Skipping server balance request fetch.');
+        return [];
+    }
+
+    try {
+        const authHeader = await getAuthHeader();
+        const response = await fetch('/api/leave-balance-requests', {
+            headers: authHeader ? { Authorization: authHeader } : {}
+        });
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+        const data = await response.json();
+        return Array.isArray(data) ? data.map(normalizeBalanceRequest) : [];
+    } catch (error) {
+        console.warn('Unable to load balance requests from server:', error);
+        return [];
+    }
+}
+
+async function refreshBalanceRequests() {
+    const serverRequests = await fetchBalanceRequestsFromServer();
+    if (serverRequests.length) {
+        cachedBalanceRequests = serverRequests;
+        localStorage.setItem(LEAVE_BALANCE_REQUESTS_KEY, JSON.stringify(serverRequests));
+    } else {
+        try {
+            cachedBalanceRequests = JSON.parse(localStorage.getItem(LEAVE_BALANCE_REQUESTS_KEY)) || [];
+        } catch {
+            cachedBalanceRequests = [];
+        }
+    }
+    return cachedBalanceRequests;
+}
+
+function getBalanceRequests() {
+    return cachedBalanceRequests;
+}
+
+function saveBalanceRequests(requests) {
+    cachedBalanceRequests = requests;
+    localStorage.setItem(LEAVE_BALANCE_REQUESTS_KEY, JSON.stringify(requests));
+}
+
+async function persistBalanceRequest(request) {
+    if (!window.supabase || window.__SUPABASE_CONFIGURED__ === false) {
+        const savedRequest = normalizeBalanceRequest({
+            ...request,
+            id: request.id || `local_${Date.now()}`,
+            status: request.status || 'Pending',
+            submittedAt: request.submittedAt || new Date().toISOString(),
+        });
+        const requests = getBalanceRequests();
+        requests.push(savedRequest);
+        saveBalanceRequests(requests);
+        return savedRequest;
+    }
+
+    try {
+        const authHeader = await getAuthHeader();
+        const response = await fetch('/api/leave-balance-requests', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {})
+            },
+            body: JSON.stringify(request)
+        });
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || payload?.message || response.statusText);
+        }
+
+        const savedRequest = await response.json();
+        return normalizeBalanceRequest(savedRequest);
+    } catch (error) {
+        console.error('Failed to persist balance request:', error);
+        throw error;
+    }
+}
+
+function renderBalanceRequests() {
+    const requestsBody = document.getElementById('balanceRequestsBody');
+    if (!requestsBody) return;
+
+    const requests = getBalanceRequests().filter(request => request.status === 'Pending');
+    requestsBody.replaceChildren();
+
+    if (requests.length === 0) {
+        const row = requestsBody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 7;
+        cell.className = 'text-center text-muted py-4';
+        cell.textContent = 'No leave balance requests are awaiting a decision.';
+        return;
+    }
+
+    requests.forEach(request => {
+        const row = requestsBody.insertRow();
+        const staffNameCell = row.insertCell();
+        const staffName = document.createElement('strong');
+        staffName.textContent = request.staffName;
+        staffNameCell.appendChild(staffName);
+        row.insertCell().textContent = formatLeaveType(request.leaveType);
+        row.insertCell().textContent = `${request.requestedDays} day${request.requestedDays === 1 ? '' : 's'}`;
+        row.insertCell().textContent = request.yearStart && request.yearEnd
+            ? `${formatLeaveDate(request.yearStart)} - ${formatLeaveDate(request.yearEnd)}`
+            : '—';
+        row.insertCell().textContent = request.reason || '—';
+
+        const statusCell = row.insertCell();
+        const badge = document.createElement('span');
+        badge.className = request.status === 'Approved'
+            ? 'badge bg-success'
+            : request.status === 'Rejected'
+                ? 'badge bg-danger'
+                : 'badge bg-warning text-dark';
+        badge.textContent = request.status;
+        statusCell.appendChild(badge);
+
+        const actionCell = row.insertCell();
+        if (request.status === 'Pending') {
+            for (const [status, buttonClass, label] of [
+                ['Approved', 'btn-success', 'Approve'],
+                ['Rejected', 'btn-danger', 'Reject']
+            ]) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `btn btn-sm ${buttonClass}${status === 'Approved' ? ' me-1' : ''}`;
+                button.textContent = label;
+                button.addEventListener('click', () => updateBalanceRequestStatus(request.id, status));
+                actionCell.appendChild(button);
+            }
+        } else {
+            actionCell.textContent = 'Decision recorded';
+        }
+    });
+}
+
+async function updateBalanceRequestStatus(requestId, status) {
+    const requests = getBalanceRequests();
+    const request = requests.find(item => item.id === requestId);
+    if (!request || request.status !== 'Pending') return;
+
+    try {
+        const authHeader = await getAuthHeader();
+        const response = await fetch('/api/leave-balance-requests', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(authHeader ? { Authorization: authHeader } : {})
+            },
+            body: JSON.stringify({
+                id: requestId,
+                decision: status
+            })
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => null);
+            throw new Error(errorPayload?.error || response.statusText || 'Unable to update balance request status');
+        }
+
+        await refreshBalanceRequests();
+        renderBalanceRequests();
+        renderLeaveBalance();
+        renderLeaveBalanceOverview();
+    } catch (error) {
+        alert(`Unable to update balance request status: ${error.message}`);
+    }
+}
+
+function getApprovedBalanceRequests(staffName, leaveType) {
+    return getBalanceRequests().filter(request =>
+        request.staffName === staffName
+        && request.leaveType === leaveType
+        && request.status === 'Approved'
+    );
+}
+
 function getLeaveBalance(staffName, leaveType) {
     const allowance = LEAVE_ALLOWANCES[leaveType];
     if (!allowance) return null;
@@ -180,7 +381,13 @@ function getLeaveBalance(staffName, leaveType) {
         if (!leaveStart || !leaveEnd) return total;
         return total + getOverlapDays(leaveStart, leaveEnd, leaveYear.start, leaveYear.end);
     }, 0);
-    return { allowance, taken, balance: Math.max(allowance - taken, 0), applications: applications.length };
+
+    // Add approved balance requests to the allowance
+    const approvedRequests = getApprovedBalanceRequests(staffName, leaveType);
+    const extraBalance = approvedRequests.reduce((total, request) => total + (request.requestedDays || 0), 0);
+    const effectiveAllowance = allowance + extraBalance;
+
+    return { allowance: effectiveAllowance, taken, balance: Math.max(effectiveAllowance - taken, 0), applications: applications.length };
 }
 
 function renderLeaveBalance() {
@@ -198,6 +405,9 @@ function renderLeaveBalance() {
 
 function getStaffNamesForOverview() {
     const staffNames = new Set(getLeaveApplications().map(application => application.staffName).filter(Boolean));
+    getBalanceRequests().forEach(request => {
+        if (request.staffName) staffNames.add(request.staffName);
+    });
     if (typeof getUsers === 'function') {
         getUsers()
             .filter(user => user.role === 'staff')
@@ -386,6 +596,138 @@ window.addEventListener('DOMContentLoaded', async () => {
     const fromDateEl = document.getElementById('fromDate');
     const toDateEl = document.getElementById('toDate');
     const leaveBalanceToggle = document.getElementById('leaveBalanceToggle');
+    const balanceRequestForm = document.getElementById('balanceRequestForm');
+    const balanceRequestLeaveType = document.getElementById('balanceRequestLeaveType');
+    const balanceRequestDays = document.getElementById('balanceRequestDays');
+    const balanceRequestYearStart = document.getElementById('balanceRequestYearStart');
+    const balanceRequestYearEnd = document.getElementById('balanceRequestYearEnd');
+    const balanceRequestReason = document.getElementById('balanceRequestReason');
+    const balanceRequestAlert = document.getElementById('balanceRequestAlert');
+
+    // Set default year range to the past one year
+    if (balanceRequestYearStart && balanceRequestYearEnd) {
+        const today = new Date();
+        const oneYearAgo = new Date(today);
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        balanceRequestYearStart.value = oneYearAgo.toISOString().split('T')[0];
+        balanceRequestYearEnd.value = today.toISOString().split('T')[0];
+    }
+
+    // Balance request form submission
+    if (balanceRequestForm) {
+        balanceRequestForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const user = typeof Auth !== 'undefined' ? Auth.current() : null;
+            if (!user) {
+                alert('You must be logged in to submit a balance request.');
+                return;
+            }
+
+            const leaveType = balanceRequestLeaveType?.value;
+            const requestedDays = parseInt(balanceRequestDays?.value || '0', 10);
+            const yearStart = balanceRequestYearStart?.value;
+            const yearEnd = balanceRequestYearEnd?.value;
+            const reason = balanceRequestReason?.value?.trim() || '';
+
+            if (!leaveType) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = 'Please select a leave type.';
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            if (isNaN(requestedDays) || requestedDays <= 0) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = 'Please enter a valid number of days.';
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            // Validate requested days does not exceed the base allowance
+            const baseAllowance = LEAVE_ALLOWANCES[leaveType];
+            if (baseAllowance && requestedDays > baseAllowance) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = `Requested days cannot exceed the base allowance of ${baseAllowance} days for ${formatLeaveType(leaveType)}.`;
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            if (!yearStart || !yearEnd) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = 'Please select both year start and year end dates.';
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            const start = new Date(yearStart);
+            const end = new Date(yearEnd);
+            if (start > end) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = 'Year start must be before year end.';
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            // Validate the year range is within the past one year
+            const today = new Date();
+            const oneYearAgo = new Date(today);
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            if (start < oneYearAgo) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = 'Year range cannot be older than the past one year.';
+                    balanceRequestAlert.classList.remove('d-none');
+                }
+                return;
+            }
+
+            if (balanceRequestAlert) {
+                balanceRequestAlert.classList.add('d-none');
+                balanceRequestAlert.textContent = '';
+            }
+
+            try {
+                await persistBalanceRequest({
+                    staff_name: user.name,
+                    staff_email: user.email,
+                    leave_type: leaveType,
+                    requested_days: requestedDays,
+                    year_start: yearStart,
+                    year_end: yearEnd,
+                    reason: reason,
+                    status: 'Pending',
+                    applied_at: new Date().toISOString()
+                });
+
+                await refreshBalanceRequests();
+                renderBalanceRequests();
+                renderLeaveBalance();
+                renderLeaveBalanceOverview();
+                alert('Balance request submitted! The Principal will review your request.');
+                balanceRequestForm.reset();
+                // Reset year range to past one year after form reset
+                if (balanceRequestYearStart && balanceRequestYearEnd) {
+                    const today = new Date();
+                    const oneYearAgo = new Date(today);
+                    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                    balanceRequestYearStart.value = oneYearAgo.toISOString().split('T')[0];
+                    balanceRequestYearEnd.value = today.toISOString().split('T')[0];
+                }
+            } catch (error) {
+                if (balanceRequestAlert) {
+                    balanceRequestAlert.textContent = `Unable to submit balance request: ${error.message}`;
+                    balanceRequestAlert.classList.remove('d-none');
+                } else {
+                    alert(`Unable to submit balance request: ${error.message}`);
+                }
+            }
+        });
+    }
 
     if (leaveForm) {
         leaveForm.addEventListener('submit', async (e) => {
@@ -413,14 +755,14 @@ window.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Business rule: Casual Leave cannot exceed 10 days
-            const allowance = LEAVE_ALLOWANCES[leaveType];
-            if (allowance && diffDays > allowance) {
-                alert(`${formatLeaveType(leaveType)} cannot exceed ${allowance} days. Please reduce the date range or choose a different leave type.`);
+            // Business rule: Leave cannot exceed the effective allowance (base + approved balance requests)
+            const leaveBalance = getLeaveBalance(user?.name || 'Staff member', leaveType);
+            const effectiveAllowance = leaveBalance ? leaveBalance.allowance : LEAVE_ALLOWANCES[leaveType];
+            if (effectiveAllowance && diffDays > effectiveAllowance) {
+                alert(`${formatLeaveType(leaveType)} cannot exceed ${effectiveAllowance} days. Please reduce the date range or choose a different leave type.`);
                 return;
             }
 
-            const leaveBalance = getLeaveBalance(user?.name || 'Staff member', leaveType);
             if (leaveBalance && diffDays > leaveBalance.balance) {
                 alert(`You have only ${leaveBalance.balance} ${leaveType} leave day${leaveBalance.balance === 1 ? '' : 's'} remaining.`);
                 return;
@@ -477,8 +819,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     await refreshLeaveApplications();
+    await refreshBalanceRequests();
     updateLeaveInfo();
     renderLeaveRequests();
+    renderBalanceRequests();
     renderLeaveBalance();
     renderLeaveBalanceOverview();
 });
@@ -532,9 +876,12 @@ function checkLeaveLimits() {
 
     if (!leaveAlert) return true;
 
-    const allowance = LEAVE_ALLOWANCES[leaveType];
-    if (allowance && diffDays > allowance) {
-        leaveAlert.textContent = `Leave exceeds allowed ${formatLeaveType(leaveType)} (${allowance} days).`;
+    const user = typeof Auth !== 'undefined' ? Auth.current() : null;
+    const balance = user ? getLeaveBalance(user.name, leaveType) : null;
+    const effectiveAllowance = balance ? balance.allowance : LEAVE_ALLOWANCES[leaveType];
+
+    if (effectiveAllowance && diffDays > effectiveAllowance) {
+        leaveAlert.textContent = `Leave exceeds allowed ${formatLeaveType(leaveType)} (${effectiveAllowance} days).`;
         leaveAlert.classList.remove('d-none');
         return false;
     }

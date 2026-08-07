@@ -738,6 +738,9 @@ if (user.role === "staff") {
   if (typeof window.renderLeaveBalanceOverview === "function") {
     window.renderLeaveBalanceOverview();
   }
+  if (typeof window.renderBalanceRequests === "function") {
+    window.renderBalanceRequests();
+  }
 }
 
 // ── 12. Section switcher ──────────────────────────────────────
