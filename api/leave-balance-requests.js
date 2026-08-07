@@ -16,18 +16,11 @@ const LEAVE_ALLOWANCES = {
 /**
  * Calculate the previous leave year bounds.
  * Leave year: 1 July to 30 June.
- * If today is 07 Aug 2026 → previous year: 01 Jul 2025 to 30 Jun 2026
- * If today is 15 Feb 2027 → previous year: 01 Jul 2025 to 30 Jun 2026
- * If today is 20 Jul 2027 → previous year: 01 Jul 2026 to 30 Jun 2027
  */
 function getPreviousLeaveYear(referenceDate = new Date()) {
   const month = referenceDate.getUTCMonth() + 1; // 1-12
   const year = referenceDate.getUTCFullYear();
 
-  // If current month >= July, the current leave year started this July.
-  // The previous leave year is the one before that.
-  // If current month < July, the current leave year started last July.
-  // The previous leave year is the one before that.
   const currentLeaveYearStartYear = month >= LEAVE_YEAR_START_MONTH ? year : year - 1;
   const previousLeaveYearStartYear = currentLeaveYearStartYear - 1;
 
@@ -93,6 +86,10 @@ async function getSessionProfile(req, res) {
  * Calculate unused leave for a staff member for a given leave type
  * within the previous leave year.
  * unused = allowance - taken (approved leave in that year)
+ *
+ * NOTE: yearStart/yearEnd here are already "YYYY-MM-DD" strings
+ * (produced by formatDate() before this function is called), so
+ * they must be parsed directly — do NOT call formatDate() on them.
  */
 async function calculateUnusedLeave(userId, leaveType, yearStart, yearEnd) {
   const allowance = LEAVE_ALLOWANCES[leaveType];
@@ -109,8 +106,8 @@ async function calculateUnusedLeave(userId, leaveType, yearStart, yearEnd) {
     throw new Error(error.message);
   }
 
-  const rangeStart = parseDate(formatDate(yearStart));
-  const rangeEnd = parseDate(formatDate(yearEnd));
+  const rangeStart = parseDate(yearStart);
+  const rangeEnd = parseDate(yearEnd);
 
   let taken = 0;
   (applications || []).forEach(app => {
@@ -278,7 +275,6 @@ module.exports = async (req, res) => {
 
     if (decision === 'Approved') {
       // ── APPROVED: update leave balance immediately ─────────
-      // Use a transaction to ensure data consistency.
       const { data: updated, error: updateError } = await supabase
         .from('leave_balance_requests')
         .update({
