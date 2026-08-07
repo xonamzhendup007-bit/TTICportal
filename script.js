@@ -29,7 +29,8 @@ function computeDays(startDate, endDate) {
 function normalizeLeaveApplication(record) {
     return {
         id: record.leave_id || record.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        staffName: record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member'),
+        userId: record.user_id || record.userId || null,
+        staffName: (record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member')).trim(),
         staffEmail: record.staff_email || record.staffEmail || record.staff_users?.email || '',
         leaveType: record.leave_type || record.leaveType || '',
         purpose: record.reason || record.purpose || '',
@@ -63,6 +64,7 @@ async function fetchLeaveApplicationsFromServer() {
     try {
         const authHeader = await getAuthHeader();
         const response = await fetch('/api/leave-applications', {
+            cache: 'no-store',
             headers: authHeader ? { Authorization: authHeader } : {}
         });
         if (!response.ok) {
@@ -72,13 +74,13 @@ async function fetchLeaveApplicationsFromServer() {
         return Array.isArray(data) ? data.map(normalizeLeaveApplication) : [];
     } catch (error) {
         console.warn('Unable to load leave applications from server:', error);
-        return [];
+        return null;
     }
 }
 
 async function refreshLeaveApplications() {
     const serverApplications = await fetchLeaveApplicationsFromServer();
-    if (serverApplications.length) {
+    if (Array.isArray(serverApplications)) {
         cachedLeaveApplications = serverApplications;
         localStorage.setItem(LEAVE_APPLICATIONS_KEY, JSON.stringify(serverApplications));
     } else {
@@ -196,6 +198,7 @@ function formatLeaveType(leaveType) {
 function normalizeBalanceRequest(record) {
     return {
         id: record.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        userId: record.user_id || record.userId || null,
         staffName: record.staff_name || record.staffName || (record.staff_users ? `${record.staff_users.first_name} ${record.staff_users.last_name}` : 'Staff member'),
         staffEmail: record.staff_email || record.staffEmail || record.staff_users?.email || '',
         leaveType: record.leave_type || record.leaveType || '',
@@ -223,6 +226,7 @@ async function fetchBalanceRequestsFromServer() {
     try {
         const authHeader = await getAuthHeader();
         const response = await fetch('/api/leave-balance-requests', {
+            cache: 'no-store',
             headers: authHeader ? { Authorization: authHeader } : {}
         });
         if (!response.ok) {
@@ -232,13 +236,13 @@ async function fetchBalanceRequestsFromServer() {
         return Array.isArray(data) ? data.map(normalizeBalanceRequest) : [];
     } catch (error) {
         console.warn('Unable to load balance requests from server:', error);
-        return [];
+        return null;
     }
 }
 
 async function refreshBalanceRequests() {
     const serverRequests = await fetchBalanceRequestsFromServer();
-    if (serverRequests.length) {
+    if (Array.isArray(serverRequests)) {
         cachedBalanceRequests = serverRequests;
         localStorage.setItem(LEAVE_BALANCE_REQUESTS_KEY, JSON.stringify(serverRequests));
     } else {
@@ -390,24 +394,33 @@ async function updateBalanceRequestStatus(requestId, status) {
     }
 }
 
-function getApprovedBalanceRequests(staffName, leaveType) {
+function matchesApplicationUser(application, staffIdentifier) {
+    if (!application || !staffIdentifier) return false;
+    if (application.userId) {
+        return application.userId === staffIdentifier;
+    }
+    return application.staffName === staffIdentifier;
+}
+
+function getApprovedBalanceRequests(staffIdentifier, leaveType) {
     return getBalanceRequests().filter(request =>
-        request.staffName === staffName
+        matchesApplicationUser(request, staffIdentifier)
         && request.leaveType === leaveType
         && request.status === 'Approved'
     );
 }
 
-function getLeaveBalance(staffName, leaveType) {
+function getLeaveBalance(staffIdentifier, leaveType) {
     const allowance = LEAVE_ALLOWANCES[leaveType];
     if (!allowance) return null;
 
     const leaveYear = getLeaveYearBounds();
     const applications = getLeaveApplications().filter(application =>
-        application.staffName === staffName
+        matchesApplicationUser(application, staffIdentifier)
         && application.leaveType === leaveType
-        && application.status !== 'Rejected'
+        && application.status === 'Approved'
     );
+
     const taken = applications.reduce((total, application) => {
         const leaveStart = parseDateFromIso(application.fromDate);
         const leaveEnd = parseDateFromIso(application.toDate);
@@ -417,7 +430,7 @@ function getLeaveBalance(staffName, leaveType) {
 
     // Add approved balance requests to the allowance
     // Only Approved requests add to leave balance (leaveBalance field)
-    const approvedRequests = getApprovedBalanceRequests(staffName, leaveType);
+    const approvedRequests = getApprovedBalanceRequests(staffIdentifier, leaveType);
     const extraBalance = approvedRequests.reduce((total, request) => total + (request.leaveBalance || 0), 0);
     const effectiveAllowance = allowance + extraBalance;
 
@@ -427,9 +440,10 @@ function getLeaveBalance(staffName, leaveType) {
 function renderLeaveBalance() {
     const currentUser = typeof Auth !== 'undefined' ? Auth.current() : null;
     if (!currentUser || currentUser.role !== 'staff') return;
+    const staffIdentifier = currentUser.id || currentUser.name;
 
     for (const leaveType of ['annual', 'casual', 'paternity', 'bereavement', 'medical']) {
-        const balance = getLeaveBalance(currentUser.name, leaveType);
+        const balance = getLeaveBalance(staffIdentifier, leaveType);
         const balanceElement = document.getElementById(`${leaveType}LeaveBalance`);
         const applicationsElement = document.getElementById(`${leaveType}LeaveApplications`);
         if (balanceElement) balanceElement.textContent = `${balance.taken} taken · ${balance.balance} days left`;
@@ -667,8 +681,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Count taken leave in the previous leave year
+        const userIdentifier = user.id || user.name;
         const applications = getLeaveApplications().filter(application =>
-            application.staffName === user.name
+            matchesApplicationUser(application, userIdentifier)
             && application.leaveType === leaveType
             && application.status !== 'Rejected'
         );
@@ -721,8 +736,9 @@ window.addEventListener('DOMContentLoaded', async () => {
             // Validate requested days does not exceed unused leave available
             const prevYearBounds = getPreviousLeaveYear();
             const allowance = LEAVE_ALLOWANCES[leaveType];
+            const userIdentifier = user.id || user.name;
             const applications = getLeaveApplications().filter(application =>
-                application.staffName === user.name
+                matchesApplicationUser(application, userIdentifier)
                 && application.leaveType === leaveType
                 && application.status !== 'Rejected'
             );
