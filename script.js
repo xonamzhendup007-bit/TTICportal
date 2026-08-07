@@ -307,11 +307,6 @@ async function updateLeaveStatus(applicationId, status) {
     const application = applications.find(item => item.id === applicationId);
     if (!application || application.status !== 'Pending') return;
 
-    const principalKey = window.prompt('Enter the principal approval key to confirm this decision:');
-    if (!principalKey) {
-        return;
-    }
-
     try {
         const authHeader = await getAuthHeader();
         const response = await fetch('/api/approve-leave', {
